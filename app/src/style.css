@@ -1,0 +1,176 @@
+/* Dunkel, ruhig, kontrastarm — das Ding steht nachts im Schlafzimmer.
+   Die einzigen kräftigen Farben sind die Statusfarben, und die sollen
+   auch aus drei Metern Entfernung eindeutig sein. */
+
+:root {
+  --bg: #0b0d10;
+  --tile: #14171c;
+  --fg: #e8eaed;
+  --dim: #8a9199;
+  --live: #34d17a;
+  --warn: #f2b134;
+  --dead: #ff4d4d;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  /* Notch/Home-Indicator respektieren, wenn als PWA installiert */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+           env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+/* ── Bedienleiste ───────────────────────────────────────────────── */
+
+#bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-bottom: 1px solid #1e232a;
+}
+
+#bar.error { color: var(--dead); }
+
+button {
+  background: #1e232a;
+  color: var(--fg);
+  border: 1px solid #2a313a;
+  border-radius: 8px;
+  /* 44px Mindesthöhe — mit schlafendem Kind auf dem Arm trifft man
+     kleinere Ziele nicht zuverlässig. */
+  min-height: 44px;
+  padding: 0 14px;
+  font: inherit;
+  cursor: pointer;
+}
+
+button.on {
+  background: #23402f;
+  border-color: var(--live);
+  color: var(--live);
+}
+
+.picker { display: flex; gap: 6px; flex-wrap: wrap; }
+.info { margin-left: auto; color: var(--dim); font-size: 13px; }
+
+/* ── Kachelraster ───────────────────────────────────────────────── */
+
+#app {
+  flex: 1;
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  align-content: start;
+  min-height: 0;
+}
+
+/* Vollbild: eine Kachel füllt alles, der Rest ist ausgeblendet */
+#app:not([data-focus=""]) { grid-template-columns: 1fr; padding: 0; gap: 0; }
+.tile.hidden { display: none; }
+
+.tile {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: var(--tile);
+  border-radius: 10px;
+  overflow: hidden;
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+
+#app:not([data-focus=""]) .tile {
+  aspect-ratio: auto;
+  height: 100%;
+  border-radius: 0;
+}
+
+.tile video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  background: #000;
+}
+
+/* ── Status ─────────────────────────────────────────────────────── */
+
+.label {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  font-size: 13px;
+  text-shadow: 0 1px 3px #000;
+  pointer-events: none;
+}
+
+.badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  background: #000a;
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+
+.badge::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.tile[data-state="live"]     .badge { color: var(--live); }
+.tile[data-state="connecting"] .badge,
+.tile[data-state="stalled"]  .badge { color: var(--warn); }
+.tile[data-state="lost"]     .badge { color: var(--dead); }
+
+.tile[data-state="stalled"] { border-color: var(--warn); }
+
+/* Kein Bild mehr? Dann darf auch keins mehr zu sehen sein. Ein
+   eingefrorenes Standbild, das wie ein Livebild aussieht, ist der
+   gefährlichste Zustand einer Babycam — deshalb graut die Kachel aus. */
+.tile[data-state="stalled"] video { filter: grayscale(1) brightness(0.45); }
+.tile[data-state="lost"]    video { filter: grayscale(1) brightness(0.25); }
+
+.tile[data-state="lost"] {
+  border-color: var(--dead);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% { border-color: #7a1f1f; }
+}
+
+/* "Verbinde…" soll sich von "steht still" unterscheiden lassen */
+.tile[data-state="connecting"] .badge::before { animation: blink 1s steps(2) infinite; }
+@keyframes blink { 50% { opacity: 0.2; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .tile[data-state="lost"], .badge::before { animation: none; }
+}
+
+/* Stummschaltung sichtbar machen */
+.tile[data-muted="false"] .label::after { content: " 🔊"; }

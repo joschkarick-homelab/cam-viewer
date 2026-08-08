@@ -1,0 +1,164 @@
+import { CamTile, type CamConfig } from './tile'
+import type { Transport } from './transport'
+import { mseSupported } from './transport'
+import { keepScreenOn, wakeLockSupported, unlockAudio, stopAlarm } from './keepalive'
+import './style.css'
+
+interface AppConfig {
+  /** Basis-URL von go2rtc. Leer = gleicher Origin (Reverse Proxy reicht /api durch). */
+  go2rtc: string
+  cams: CamConfig[]
+}
+
+const app = document.getElementById('app')!
+const bar = document.getElementById('bar')!
+let tiles: CamTile[] = []
+
+// ── Umgebung erkennen ───────────────────────────────────────────────
+
+/**
+ * WebRTC im LAN, MSE von außen.
+ *
+ * Grund: die WebRTC-Medien laufen direkt auf go2rtc:8555 und damit am
+ * Reverse Proxy — und an authentik — vorbei. Von außen wäre das ein
+ * ungeschützter Port. MSE läuft komplett über die bestehende
+ * WSS-Verbindung, kostet dafür ~0,7 s mehr Latenz.
+ *
+ * Die Heuristik lässt sich per ?transport=webrtc|mse überstimmen; die
+ * Wahl bleibt dann gespeichert.
+ */
+function pickTransport(): Transport {
+  const forced = new URLSearchParams(location.search).get('transport')
+  if (forced === 'webrtc' || forced === 'mse') {
+    localStorage.setItem('transport', forced)
+    return forced
+  }
+  const saved = localStorage.getItem('transport')
+  if (saved === 'webrtc' || saved === 'mse') return saved
+
+  const h = location.hostname
+  const local =
+    /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.)/.test(h) ||
+    h.endsWith('.local') ||
+    h.endsWith('.internal') ||
+    !h.includes('.') // blanker Hostname → eigenes Netz
+
+  if (local) return 'webrtc'
+  return mseSupported ? 'mse' : 'webrtc'
+}
+
+/**
+ * Schwache Geräte bekommen den VGA-Substream.
+ *
+ * Das Fire Tablet 7 dekodiert 3× 1080p nicht flüssig — und ein ruckelnder
+ * Stream ist bei einer Babycam schlimmer als ein niedrig aufgelöster.
+ * Per ?sd=1 / ?sd=0 erzwingbar.
+ */
+function useSubstream(): boolean {
+  const forced = new URLSearchParams(location.search).get('sd')
+  if (forced === '1' || forced === '0') {
+    localStorage.setItem('sd', forced)
+    return forced === '1'
+  }
+  const saved = localStorage.getItem('sd')
+  if (saved) return saved === '1'
+
+  const mem = (navigator as any).deviceMemory
+  const cores = navigator.hardwareConcurrency ?? 8
+  return (mem !== undefined && mem <= 2) || cores <= 4
+}
+
+// ── Start ───────────────────────────────────────────────────────────
+
+async function main() {
+  const cfg: AppConfig = await fetch('cams.json', { cache: 'no-cache' }).then((r) => r.json())
+  const transport = pickTransport()
+  const sd = useSubstream()
+  const base = cfg.go2rtc || ''
+
+  tiles = cfg.cams.map((cam) => new CamTile(cam, base, transport, sd))
+  tiles.forEach((t) => {
+    app.append(t.el)
+    t.el.addEventListener('click', () => toggleFullscreen(t))
+  })
+
+  buildBar(transport, sd)
+
+  // Alarm zentral verwalten: er verstummt erst, wenn KEINE Kachel mehr
+  // im Zustand "lost" ist. Einzelne Kacheln können das nicht entscheiden.
+  app.addEventListener('tilestate', () => {
+    if (!tiles.some((t) => t.isLost())) stopAlarm()
+  })
+
+  await Promise.all(tiles.map((t) => t.connect()))
+
+  // Nach einem Suspend (Deckel zu, Tab weg) sind die Streams meist tot,
+  // ohne dass ein Event feuert. Beim Zurückkommen prüfen wir aktiv nach.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return
+    tiles.filter((t) => t.isLost()).forEach((t) => void t.connect())
+  })
+}
+
+// ── Bedienleiste ────────────────────────────────────────────────────
+
+function buildBar(transport: Transport, sd: boolean) {
+  // Ein einziger Tap, der drei Dinge gleichzeitig erledigt: AudioContext
+  // entsperren (sonst kein Alarm), Wake Lock anfordern (browser verlangen
+  // dafür teils eine Geste) und den Ton der ersten Cam freigeben.
+  const start = button('🔊 Ton & Bildschirm an', async () => {
+    unlockAudio()
+    await keepScreenOn()
+    tiles[0]?.setMuted(false)
+    start.remove()
+    bar.prepend(soundPicker())
+  })
+
+  const info = document.createElement('span')
+  info.className = 'info'
+  info.textContent = [
+    transport === 'webrtc' ? 'WebRTC' : 'MSE',
+    sd ? 'VGA' : 'HD',
+    wakeLockSupported ? null : 'kein Wake Lock',
+  ].filter(Boolean).join(' · ')
+
+  bar.append(start, info)
+}
+
+/** Ton immer nur auf EINER Cam — sonst hört man bei drei Streams nur Matsch. */
+function soundPicker(): HTMLElement {
+  const wrap = document.createElement('div')
+  wrap.className = 'picker'
+  tiles.forEach((t, i) => {
+    const b = button(t.el.querySelector('.label')!.textContent!, () => {
+      tiles.forEach((o, j) => o.setMuted(i !== j))
+      wrap.querySelectorAll('button').forEach((x, j) => x.classList.toggle('on', i === j))
+    })
+    if (i === 0) b.classList.add('on')
+    wrap.append(b)
+  })
+  return wrap
+}
+
+function button(text: string, onClick: () => void): HTMLButtonElement {
+  const b = document.createElement('button')
+  b.textContent = text
+  b.addEventListener('click', (e) => {
+    e.stopPropagation()
+    onClick()
+  })
+  return b
+}
+
+// ── Vollbild ────────────────────────────────────────────────────────
+
+function toggleFullscreen(tile: CamTile) {
+  const active = app.dataset.focus === tile.id
+  app.dataset.focus = active ? '' : tile.id
+  tiles.forEach((t) => t.el.classList.toggle('hidden', !active && t.id !== tile.id))
+}
+
+main().catch((err) => {
+  bar.textContent = `Start fehlgeschlagen: ${err.message}`
+  bar.classList.add('error')
+})

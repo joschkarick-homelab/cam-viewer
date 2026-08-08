@@ -1,0 +1,102 @@
+# go2rtc — Streaming-Gateway für die Tapo-Cams
+#
+# Läuft auf der (ehemaligen) Scrypted-VM.
+# Binary: https://github.com/AlexxIT/go2rtc/releases  → /usr/local/bin/go2rtc
+# Config gehört nach /etc/go2rtc/go2rtc.yaml (siehe deploy/go2rtc.service)
+#
+# ┌─────────────────────────────────────────────────────────────────┐
+# │ AUSFÜLLEN VOR DEM START:                                        │
+# │  1. TAPO_CLOUD_PASSWORD  → dein TP-Link-Konto-Passwort          │
+# │  2. candidates           → die LAN-IP DIESER VM                 │
+# └─────────────────────────────────────────────────────────────────┘
+
+api:
+  # Nur im LAN lauschen. Der Zugriff von außen läuft über den Reverse
+  # Proxy in der Vibe-Coding-LXC, nicht direkt hierher.
+  listen: ":1984"
+  origin: "*" # CORS — nur nötig, solange App und go2rtc getrennte Origins sind.
+    # Sobald der Proxy /api/* durchreicht (siehe deploy/), auf "" setzen.
+
+rtsp:
+  listen: ":8554"
+
+webrtc:
+  listen: ":8555" # TCP + UDP
+  candidates:
+    # TODO: LAN-IP dieser VM eintragen. Ohne diesen Eintrag findet der
+    # Browser im LAN keinen direkten Pfad und fällt unnötig auf MSE zurück.
+    - 192.168.2.10:8555
+    # Zusätzlich TCP-Kandidat, falls ein Client kein UDP darf (manche
+    # Gäste-WLANs, restriktive Firewalls):
+    - 192.168.2.10:8555/tcp
+
+# ── Kameras ────────────────────────────────────────────────────────
+#
+# tapo:// verbindet DIREKT zur Cam auf Port 8800 — kein Cloud-Traffic.
+# Das Cloud-Passwort ist reines Credential, es wird lokal gehasht
+# (MD5/SHA256 je nach Firmware) und per RFC-7616-Digest geprüft.
+# Vorteil gegenüber rtsp://: Mikrofon-Rückkanal ist möglich.
+# Tapo kann nur ONVIF Profile S — über RTSP gibt es keinen Backchannel.
+#
+# Falls eine Cam sich mit tapo:// nicht verbinden lässt (kommt bei
+# neuerer Firmware vor), die rtsp://-Zeile aktivieren. Dann funktioniert
+# alles außer dem Mikrofon.
+
+streams:
+  schlafzimmer:
+    - tapo://TAPO_CLOUD_PASSWORD@192.168.2.52
+    # - rtsp://KAMERAKONTO:PASSWORT@192.168.2.52:554/stream1
+
+  kinderzimmer:
+    - tapo://TAPO_CLOUD_PASSWORD@192.168.2.115
+    # - rtsp://KAMERAKONTO:PASSWORT@192.168.2.115:554/stream1
+
+  springer:
+    - tapo://TAPO_CLOUD_PASSWORD@192.168.2.35
+    # - rtsp://KAMERAKONTO:PASSWORT@192.168.2.35:554/stream1
+
+  # Substreams (VGA) für das Fire Tablet 7. Eigene Stream-Namen, damit
+  # das Tablet gezielt darauf zugreifen kann, ohne dass die anderen
+  # Geräte Auflösung verlieren.
+  # subtype=1 = VGA, subtype=0 = HD (Default)
+  schlafzimmer_sd:
+    - tapo://TAPO_CLOUD_PASSWORD@192.168.2.52?subtype=1
+  kinderzimmer_sd:
+    - tapo://TAPO_CLOUD_PASSWORD@192.168.2.115?subtype=1
+  springer_sd:
+    - tapo://TAPO_CLOUD_PASSWORD@192.168.2.35?subtype=1
+
+# ── HomeKit ────────────────────────────────────────────────────────
+#
+# Ersetzt Scrypteds HomeKit-Bridge.
+#
+# WICHTIG vor dem Aktivieren:
+#  1. Cams ZUERST aus Scrypteds HomeKit-Bridge entfernen. Ein Gerät
+#     kann nur mit einem Ökosystem gepairt sein.
+#  2. Die Cams tauchen danach als NEUE Geräte in Home auf —
+#     Raumzuordnung und Automationen musst du neu setzen.
+#  3. mDNS muss zwischen dieser VM und den Apple-Geräten funktionieren.
+#     Bei getrennten VLANs braucht es einen mDNS-Reflector.
+#  4. HomeKit verlangt OPUS-Audio, Tapo liefert G.711/PCMA → go2rtc
+#     transkodiert per FFmpeg. Das kostet CPU. Wenn dir das zu teuer
+#     ist: Audio hier weglassen und Ton nur über die App hören.
+#
+# PINs frei wählbar, Format 8 Ziffern. Beim Pairing in der Home-App
+# manuell eingeben ("Weitere Optionen" → Code eingeben).
+
+homekit:
+  schlafzimmer:
+    pin: 11122333
+    name: Babycam Schlafzimmer
+  kinderzimmer:
+    pin: 11122444
+    name: Babycam Kinderzimmer
+  springer:
+    pin: 11122555
+    name: Springer-Cam
+
+log:
+  level: info
+  # Beim Ersteinrichten hilfreich, danach wieder rausnehmen:
+  # streams: debug
+  # webrtc: debug

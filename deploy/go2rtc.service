@@ -1,0 +1,40 @@
+# systemd-Unit für go2rtc auf der (ehemaligen) Scrypted-VM.
+#
+# Installation:
+#   wget -O /usr/local/bin/go2rtc https://github.com/AlexxIT/go2rtc/releases/latest/download/go2rtc_linux_amd64
+#   chmod +x /usr/local/bin/go2rtc
+#   mkdir -p /etc/go2rtc && cp go2rtc/go2rtc.yaml /etc/go2rtc/
+#   cp deploy/go2rtc.service /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now go2rtc
+#
+# Danach: http://<VM-IP>:1984 → dort sollten alle drei Cams laufen,
+# BEVOR du die App anfasst. Das trennt Kamera-Probleme sauber von
+# App-Problemen.
+
+[Unit]
+Description=go2rtc Streaming Gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/go2rtc -config /etc/go2rtc/go2rtc.yaml
+Restart=always
+RestartSec=5s
+
+# Die Config enthält das Tapo-Cloud-Passwort im Klartext — das ist
+# systembedingt, go2rtc kennt keine Secret-Datei. Wenigstens die
+# Dateirechte eng halten: chmod 600 /etc/go2rtc/go2rtc.yaml
+User=go2rtc
+Group=go2rtc
+StateDirectory=go2rtc
+WorkingDirectory=/var/lib/go2rtc
+
+# HomeKit braucht mDNS im lokalen Netz — deshalb KEIN PrivateNetwork.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/go2rtc
+
+[Install]
+WantedBy=multi-user.target
