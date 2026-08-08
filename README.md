@@ -110,7 +110,7 @@ nach GHCR und startet den Stack per Tailscale-SSH in der LXC neu.
 
 ```
 push auf main
-   └─► build.yml    Vite-Build → nginx-Image → ghcr.io/joschkarick/cam-viewer
+   └─► build.yml    Vite-Build → nginx-Image → ghcr.io/joschkarick-homelab/cam-viewer
           └─► deploy.yml   Tailscale → scp compose+env → docker compose up -d
 ```
 
@@ -122,19 +122,21 @@ Deploy automatisch mit ausgerollt.
 
 ### Einmalig einzurichten
 
-Das Repo liegt unter `joschkarick/`, nicht unter `joschkarick-homelab/`.
-Die vorhandenen Secrets greifen hier also **nicht** — sie müssen für
-dieses Repo neu gesetzt werden.
+Das Repo liegt in derselben Org wie `color-dices`. Sind
+`TS_OAUTH_CLIENT_ID`, `TS_OAUTH_SECRET`, `DEPLOY_USER` und
+`DEPLOY_HOST` dort als **Organization Secrets** hinterlegt, greifen sie
+hier automatisch — dann sind nur die beiden unteren Zeilen zu setzen.
+Liegen sie dagegen pro Repo, müssen alle sechs neu angelegt werden.
 
 **Settings → Secrets and variables → Actions → Secrets:**
 
 | Secret | Beispiel | Anmerkung |
 |---|---|---|
-| `TS_OAUTH_CLIENT_ID` | | wie bei color-dices |
-| `TS_OAUTH_SECRET` | | wie bei color-dices |
-| `DEPLOY_USER` | `root` | wie bei color-dices |
-| `DEPLOY_HOST` | LXC im Tailnet | wie bei color-dices |
-| `HOST_PORT` | `8091` | frei, darf nicht mit Qwixx (8090) kollidieren |
+| `TS_OAUTH_CLIENT_ID` | | ggf. schon auf Org-Ebene da |
+| `TS_OAUTH_SECRET` | | ggf. schon auf Org-Ebene da |
+| `DEPLOY_USER` | `root` | ggf. schon auf Org-Ebene da |
+| `DEPLOY_HOST` | LXC im Tailnet | ggf. schon auf Org-Ebene da |
+| `HOST_PORT` | `8091` | **neu** — darf nicht mit Qwixx (8090) kollidieren |
 | `GO2RTC_HOST` | `192.168.2.10:1984` | **neu** — die Scrypted-VM |
 
 **→ Variables:**

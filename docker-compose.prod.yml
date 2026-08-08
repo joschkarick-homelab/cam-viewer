@@ -2,7 +2,7 @@
 # kopiert und mit `--env-file stack.env` gestartet.
 services:
   cam-viewer:
-    image: ghcr.io/joschkarick/cam-viewer:latest
+    image: ghcr.io/joschkarick-homelab/cam-viewer:latest
     restart: unless-stopped
     ports:
       - "${HOST_PORT:-8091}:80"
