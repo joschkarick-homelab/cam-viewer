@@ -15,11 +15,23 @@ Bundle: ~3,7 kB JS + 1,1 kB CSS (gzip), kein Framework.
 ## Architektur
 
 ```
-Tapo C100/C200  ──tapo://──►  go2rtc          (Scrypted-VM)
-                              ├─ WebRTC :8555  ─┐
-                              ├─ MSE/WS  :1984  ├─►  NPMplus  ──►  PWA
-                              └─ HomeKit        ─┘   (TLS + authentik)
+Tapo C100/C200 ──tapo://──► go2rtc  (Scrypted-VM, 192.168.2.10)
+                            │  ├─ HomeKit
+                            │  └─ :1984 / :8555
+                            │
+                            ▼  /api
+                   cam-viewer-Container  (LXC, Port 8091)
+                    nginx: PWA + /api-Proxy
+                            │
+                            ▼
+                        NPMplus  (TLS + authentik)
+                            │
+                            ▼
+                     cam.DEINE-DOMAIN.tld
 ```
+
+WebRTC-Medien laufen am Proxy vorbei direkt zu `go2rtc:8555` — das geht
+nur intern. Von außen bleibt MSE, das komplett durch den Proxy fließt.
 
 | | intern (192.168.2.0/24) | extern |
 |---|---|---|
@@ -54,21 +66,28 @@ unter `webrtc.candidates`.
 **Erst weitermachen, wenn `http://<VM-IP>:1984` alle drei Cams mit Bild
 und Ton zeigt.** Das trennt Kamera- von App-Problemen.
 
-### 2. App bauen und ausliefern
+### 2. App deployen
 
-```bash
-cd app && npm ci && npm run build
-rsync -a --delete dist/ root@<LXC>:/var/www/cam-viewer/
-```
+Läuft automatisch per GitHub Actions (siehe [Deployment](#deployment)).
+Einmalig die Secrets im Repo setzen, dann deployt jeder Push auf `main`
+von selbst.
 
-nginx in der LXC nach `deploy/app-nginx.conf` einrichten (Port 8080,
-nur intern).
+Manuell anstoßen geht über **Actions → Build & Push Docker Image →
+Run workflow**.
 
 ### 3. NPMplus
 
-Proxy Host für `cam.DEINE-DOMAIN.tld` anlegen, Inhalt von
-`deploy/npmplus-advanced.conf` unter **Advanced → Custom Nginx
-Configuration** einfügen und die drei Platzhalter ersetzen.
+Proxy Host für `cam.DEINE-DOMAIN.tld` anlegen:
+
+| Feld | Wert |
+|---|---|
+| Forward Hostname/IP | LXC-IP |
+| Forward Port | `8091` (bzw. dein `HOST_PORT`) |
+| Websockets Support | **an** |
+| SSL | Zertifikat + Force SSL |
+
+Inhalt von `deploy/npmplus-advanced.conf` unter **Advanced → Custom
+Nginx Configuration** einfügen und `AUTHENTIK_IP` ersetzen.
 
 Internes DNS muss `cam.DEINE-DOMAIN.tld` auf die **LAN-IP von NPMplus**
 zeigen (Split-Horizon). Sonst laufen interne Geräte über den
@@ -81,6 +100,52 @@ nur mit einem Ökosystem gepairt sein. Dann in der Home-App über
 „Weitere Optionen → Code eingeben" die PINs aus `go2rtc.yaml` nutzen.
 
 Erst wenn das läuft, Scrypted endgültig abschalten.
+
+---
+
+## Deployment
+
+Gleiches Muster wie `color-dices`: GitHub baut ein Image, schiebt es
+nach GHCR und startet den Stack per Tailscale-SSH in der LXC neu.
+
+```
+push auf main
+   └─► build.yml    Vite-Build → nginx-Image → ghcr.io/joschkarick/cam-viewer
+          └─► deploy.yml   Tailscale → scp compose+env → docker compose up -d
+```
+
+Der Container liefert nicht nur die statischen Dateien aus, sondern
+reicht auch `/api` an go2rtc weiter. Das ist Absicht: dadurch liegen
+Same-Origin-Setup und die kritischen WebSocket-Timeouts versioniert im
+Repo statt handgetippt in einem NPMplus-Textfeld — und werden bei jedem
+Deploy automatisch mit ausgerollt.
+
+### Einmalig einzurichten
+
+Das Repo liegt unter `joschkarick/`, nicht unter `joschkarick-homelab/`.
+Die vorhandenen Secrets greifen hier also **nicht** — sie müssen für
+dieses Repo neu gesetzt werden.
+
+**Settings → Secrets and variables → Actions → Secrets:**
+
+| Secret | Beispiel | Anmerkung |
+|---|---|---|
+| `TS_OAUTH_CLIENT_ID` | | wie bei color-dices |
+| `TS_OAUTH_SECRET` | | wie bei color-dices |
+| `DEPLOY_USER` | `root` | wie bei color-dices |
+| `DEPLOY_HOST` | LXC im Tailnet | wie bei color-dices |
+| `HOST_PORT` | `8091` | frei, darf nicht mit Qwixx (8090) kollidieren |
+| `GO2RTC_HOST` | `192.168.2.10:1984` | **neu** — die Scrypted-VM |
+
+**→ Variables:**
+
+| Variable | Beispiel |
+|---|---|
+| `DEPLOY_PATH` | `/opt/stacks/cam-viewer` |
+
+Außerdem: das GHCR-Package nach dem ersten Build auf **privat** stellen
+und der LXC Lesezugriff geben (Deploy-Token oder `docker login ghcr.io`),
+falls sie nicht ohnehin eingeloggt ist.
 
 ---
 

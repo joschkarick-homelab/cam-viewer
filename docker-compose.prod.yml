@@ -1,0 +1,25 @@
+# Produktion im Homelab-LXC — wird vom Deploy-Workflow per Tailscale-SSH
+# kopiert und mit `--env-file stack.env` gestartet.
+services:
+  cam-viewer:
+    image: ghcr.io/joschkarick/cam-viewer:latest
+    restart: unless-stopped
+    ports:
+      - "${HOST_PORT:-8091}:80"
+    environment:
+      # Adresse von go2rtc auf der Scrypted-VM, Form "host:port".
+      # Kommt aus stack.env, gesetzt über das Repo-Secret GO2RTC_HOST.
+      GO2RTC_HOST: "${GO2RTC_HOST:-192.168.2.10:1984}"
+
+    # cams.json ist im Image enthalten — Kameras ändern heißt also
+    # committen und pushen, der Deploy läuft dann von selbst.
+    # Wer lieber direkt auf dem Host schraubt, hängt sie hier ein:
+    # volumes:
+    #   - ./cams.json:/usr/share/nginx/html/cams.json:ro
+
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/cams.json"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

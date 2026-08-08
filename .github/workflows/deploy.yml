@@ -1,0 +1,72 @@
+name: Deploy to Homelab
+
+on:
+  workflow_run:
+    workflows: ["Build & Push Docker Image"]
+    types: [completed]
+    branches: [main]
+  push:
+    branches: [main]
+    paths:
+      - "docker-compose.prod.yml"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Render stack.env from secrets
+        env:
+          HOST_PORT: ${{ secrets.HOST_PORT }}
+          GO2RTC_HOST: ${{ secrets.GO2RTC_HOST }}
+        run: |
+          keys=(HOST_PORT GO2RTC_HOST)
+          : > stack.env
+          for key in "${keys[@]}"; do
+            value="${!key}"
+            [ -z "$value" ] && continue
+            printf '%s=%s\n' "$key" "$value" >> stack.env
+          done
+          echo "Rendered $(wc -l < stack.env) lines into stack.env"
+
+      - name: Copy compose + env to LXC (via Tailscale SSH)
+        env:
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+        run: |
+          ssh -o StrictHostKeyChecking=accept-new \
+              -o UserKnownHostsFile=/dev/null \
+              "${DEPLOY_USER}@${DEPLOY_HOST}" \
+              "mkdir -p ${DEPLOY_PATH}"
+          scp -o StrictHostKeyChecking=accept-new \
+              -o UserKnownHostsFile=/dev/null \
+              docker-compose.prod.yml stack.env \
+              "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/"
+
+      - name: Pull image & restart stack (via Tailscale SSH)
+        env:
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+        run: |
+          ssh -o StrictHostKeyChecking=accept-new \
+              -o UserKnownHostsFile=/dev/null \
+              "${DEPLOY_USER}@${DEPLOY_HOST}" \
+              "cd ${DEPLOY_PATH} \
+               && chmod 600 stack.env \
+               && docker compose -f docker-compose.prod.yml --env-file stack.env pull \
+               && docker compose -f docker-compose.prod.yml --env-file stack.env up -d --remove-orphans \
+               && docker image prune -f"
