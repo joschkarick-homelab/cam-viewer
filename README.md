@@ -193,10 +193,22 @@ einem Cam-Neustart oder kurzem WLAN-Aussetzer. Bei einer Babycam ist
 das der gefährlichste Zustand: ein Standbild sieht aus wie ein
 schlafendes Kind.
 
-Deshalb prüft `watchdog.ts` zwei unabhängige Lebenszeichen im
-Sekundentakt — `video.currentTime` und `framesDecoded` aus `getStats()`.
-Stehen beide 3 s still, gilt der Stream als tot, das Bild wird
-ausgegraut und der Reconnect startet (1s, 2s, 4s, 8s, dann alle 15 s).
+Deshalb prüft `watchdog.ts` im Sekundentakt zwei Lebenszeichen — aber
+nicht gleichberechtigt:
+
+| Signal | verfügbar | Aussagekraft |
+|---|---|---|
+| `framesDecoded` aus `getStats()` | nur WebRTC | beweist ein **dekodiertes Bild** |
+| `video.currentTime` | beide Transporte | läuft auch bei reinem Ton weiter |
+
+Wo `framesDecoded` verfügbar ist, entscheidet allein dieser Wert.
+„Eines von beiden genügt" wäre hier eine Falle: bleibt das Video stehen,
+während der Audiotrack weiterläuft, tickt `currentTime` munter weiter —
+und die Kachel meldete „Live" zu einem eingefrorenen Standbild. Auf MSE,
+wo es keinen Frame-Zähler gibt, bleibt `currentTime` das Kriterium.
+
+Steht das maßgebliche Signal 3 s still, gilt der Stream als tot, das Bild
+wird ausgegraut und der Reconnect startet (1s, 2s, 4s, 8s, dann alle 15 s).
 
 Der Deckel bei 15 s ist Absicht: unbegrenztes Backoff würde bedeuten,
 dass die Cam nach längerem Ausfall erst Minuten später zurückkommt.
