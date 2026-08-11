@@ -54,11 +54,23 @@ bestehende WSS-Verbindung, also nur Port 443. Die App wählt selbst.
 wget -O /usr/local/bin/go2rtc \
   https://github.com/AlexxIT/go2rtc/releases/latest/download/go2rtc_linux_amd64
 chmod +x /usr/local/bin/go2rtc
+
+# Dienstbenutzer. Fehlt er, bricht der Start mit 217/USER ab.
+id -u go2rtc >/dev/null 2>&1 || \
+  useradd --system --no-create-home --shell /usr/sbin/nologin go2rtc
+
 mkdir -p /etc/go2rtc && cp go2rtc/go2rtc.yaml /etc/go2rtc/
+chown -R go2rtc:go2rtc /etc/go2rtc    # sonst kann der Dienst nicht lesen
 chmod 600 /etc/go2rtc/go2rtc.yaml     # enthält das Cloud-Passwort
+
 cp deploy/go2rtc.service /etc/systemd/system/
 systemctl daemon-reload && systemctl enable --now go2rtc
 ```
+
+Die Config gehört bewusst dem Dienstbenutzer und nicht `root`: go2rtc
+schreibt die HomeKit-Pairings dort hinein. Aus demselben Grund steht
+`/etc/go2rtc` in den `ReadWritePaths` der Unit — `ProtectSystem=strict`
+würde das sonst blockieren.
 
 In `go2rtc.yaml` ausfüllen: `TAPO_CLOUD_PASSWORD` und die LAN-IP der VM
 unter `webrtc.candidates`.
