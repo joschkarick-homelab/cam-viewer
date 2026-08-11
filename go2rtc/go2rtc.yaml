@@ -6,9 +6,14 @@
 #
 # ┌─────────────────────────────────────────────────────────────────┐
 # │ AUSFÜLLEN VOR DEM START:                                        │
-# │  1. TAPO_CLOUD_PASSWORD  → dein TP-Link-Konto-Passwort          │
+# │  1. TAPO_CLOUD_PASSWORD  → siehe "Welches Passwort?" unten      │
 # │  2. candidates           → die LAN-IP DIESER VM                 │
 # └─────────────────────────────────────────────────────────────────┘
+#
+# UND EINMALIG IN DER TAPO-APP:
+#   Ich → Tapo Lab → Third-Party Compatibility → AN
+# Steht der Schalter aus, scheitert die Anmeldung auch mit dem richtigen
+# Passwort. Das ist der unauffälligste Fehler in diesem ganzen Setup.
 
 api:
   # Nur im LAN lauschen. Der Zugriff von außen läuft über den Reverse
@@ -38,9 +43,49 @@ webrtc:
 # Vorteil gegenüber rtsp://: Mikrofon-Rückkanal ist möglich.
 # Tapo kann nur ONVIF Profile S — über RTSP gibt es keinen Backchannel.
 #
-# Falls eine Cam sich mit tapo:// nicht verbinden lässt (kommt bei
-# neuerer Firmware vor), die rtsp://-Zeile aktivieren. Dann funktioniert
-# alles außer dem Mikrofon.
+# ── Welches Passwort? ──────────────────────────────────────────────
+#
+# Das Passwort deines TP-LINK-/TAPO-KONTOS — das, mit dem du dich in
+# der App mit deiner E-Mail-Adresse anmeldest.
+#
+# NICHT das "Kamerakonto" aus Geräteeinstellungen → Erweitert. Das ist
+# ein separater Benutzer, den du selbst anlegst, und er gilt nur für
+# RTSP — also ausschließlich für die auskommentierten rtsp://-Zeilen
+# unten. Die beiden zu verwechseln ist der häufigste Grund, warum
+# tapo:// scheitert.
+#
+# Nirgends ablesbar. Wenn du es nicht mehr weißt: in der App unter
+# Ich → Konto zurücksetzen. Sind die Cams über ein geteiltes Konto
+# eingerichtet, gilt das Passwort des BESITZERS, nicht das deines
+# Gastzugangs.
+#
+# ── Klartext vermeiden (optional) ──────────────────────────────────
+#
+# Statt des Passworts nimmt go2rtc auch dessen Hash in Großbuchstaben:
+#
+#   tapo://admin:GROSSBUCHSTABEN-SHA256@192.168.2.52
+#
+#   printf '%s' 'DEINPASSWORT' | sha256sum | cut -d' ' -f1 | tr -d '\n' \
+#     | tr '[:lower:]' '[:upper:]'
+#   (Zeile mit einem Leerzeichen beginnen, dann landet sie bei den
+#    üblichen Shells nicht in der History.)
+#
+# MD5 geht auch, neuere Firmware verlangt aber SHA256 — bei aktuellen
+# C100/C200 also gleich SHA256 nehmen.
+#
+# Was das bringt und was nicht: gegenüber der KAMERA ist der Hash
+# passwortäquivalent, dort gewinnst du nichts. Aber dein
+# TP-Link-KONTOPASSWORT steht nicht mehr im Klartext auf der Platte —
+# und das ist der Zugang zu allen deinen TP-Link-Geräten.
+#
+# ── Wenn es trotzdem nicht geht ────────────────────────────────────
+#
+#  1. Third-Party Compatibility in der App an? (siehe Kopf der Datei)
+#  2. Firmware: einzelne Versionen sprechen das Protokoll nicht.
+#     Symptom: "Unable to find token in response".
+#
+# Dann die rtsp://-Zeile der betroffenen Cam aktivieren — dort gilt das
+# KAMERAKONTO. Alles läuft außer dem Mikrofon-Rückkanal.
 
 streams:
   schlafzimmer:

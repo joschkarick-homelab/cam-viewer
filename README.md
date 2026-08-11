@@ -63,8 +63,38 @@ systemctl daemon-reload && systemctl enable --now go2rtc
 In `go2rtc.yaml` ausfüllen: `TAPO_CLOUD_PASSWORD` und die LAN-IP der VM
 unter `webrtc.candidates`.
 
+Vorher einmalig in der Tapo-App: **Ich → Tapo Lab → Third-Party
+Compatibility → an.** Steht der Schalter aus, scheitert die Anmeldung
+auch mit dem richtigen Passwort.
+
+#### Welches Passwort?
+
+Das deines **TP-Link-/Tapo-Kontos** — das mit der E-Mail-Adresse, mit
+dem du dich in der App anmeldest.
+
+| | wofür | wo |
+|---|---|---|
+| **Konto-Passwort** | `tapo://` | App-Login, nirgends ablesbar |
+| **Kamerakonto** | `rtsp://` | Geräteeinstellungen → Erweitert |
+
+Die beiden zu verwechseln ist der häufigste Grund, warum `tapo://`
+scheitert. Das Konto-Passwort lässt sich nirgends anzeigen; wenn du es
+nicht mehr weißt, in der App unter *Ich → Konto* zurücksetzen. Bei
+geteilten Cams gilt das Passwort des Besitzer-Kontos.
+
+Wer das Klartext-Passwort nicht auf der VM liegen haben will, trägt
+stattdessen dessen Hash ein — `tapo://admin:<SHA256 in Großbuchstaben>@<IP>`.
+Gegenüber der Kamera ist der Hash passwortäquivalent, aber das
+TP-Link-Kontopasswort (und damit der Zugang zu allen TP-Link-Geräten)
+steht dann nicht mehr in der Datei. Details in `go2rtc/go2rtc.yaml`.
+
 **Erst weitermachen, wenn `http://<VM-IP>:1984` alle drei Cams mit Bild
 und Ton zeigt.** Das trennt Kamera- von App-Problemen.
+
+Klappt eine Cam partout nicht — Symptom `Unable to find token in
+response` deutet auf eine Firmware, die das Protokoll nicht spricht —,
+die vorbereitete `rtsp://`-Zeile aktivieren. Dann läuft alles außer dem
+Mikrofon-Rückkanal.
 
 ### 2. App deployen
 
@@ -193,10 +223,22 @@ einem Cam-Neustart oder kurzem WLAN-Aussetzer. Bei einer Babycam ist
 das der gefährlichste Zustand: ein Standbild sieht aus wie ein
 schlafendes Kind.
 
-Deshalb prüft `watchdog.ts` zwei unabhängige Lebenszeichen im
-Sekundentakt — `video.currentTime` und `framesDecoded` aus `getStats()`.
-Stehen beide 3 s still, gilt der Stream als tot, das Bild wird
-ausgegraut und der Reconnect startet (1s, 2s, 4s, 8s, dann alle 15 s).
+Deshalb prüft `watchdog.ts` im Sekundentakt zwei Lebenszeichen — aber
+nicht gleichberechtigt:
+
+| Signal | verfügbar | Aussagekraft |
+|---|---|---|
+| `framesDecoded` aus `getStats()` | nur WebRTC | beweist ein **dekodiertes Bild** |
+| `video.currentTime` | beide Transporte | läuft auch bei reinem Ton weiter |
+
+Wo `framesDecoded` verfügbar ist, entscheidet allein dieser Wert.
+„Eines von beiden genügt" wäre hier eine Falle: bleibt das Video stehen,
+während der Audiotrack weiterläuft, tickt `currentTime` munter weiter —
+und die Kachel meldete „Live" zu einem eingefrorenen Standbild. Auf MSE,
+wo es keinen Frame-Zähler gibt, bleibt `currentTime` das Kriterium.
+
+Steht das maßgebliche Signal 3 s still, gilt der Stream als tot, das Bild
+wird ausgegraut und der Reconnect startet (1s, 2s, 4s, 8s, dann alle 15 s).
 
 Der Deckel bei 15 s ist Absicht: unbegrenztes Backoff würde bedeuten,
 dass die Cam nach längerem Ausfall erst Minuten später zurückkommt.

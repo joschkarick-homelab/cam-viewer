@@ -7,13 +7,22 @@
  * WLAN kurz weg war. Genau dieser Zustand ist bei einer Babycam der
  * gefährlichste: ein Standbild sieht aus wie ein schlafendes Kind.
  *
- * Deshalb prüfen wir zwei unabhängige Lebenszeichen:
+ * Deshalb prüfen wir zwei Lebenszeichen — aber nicht gleichberechtigt:
  *
- *   1. video.currentTime muss vorwärts laufen  (gilt für beide Transporte)
- *   2. framesDecoded muss steigen              (nur WebRTC, dafür präzise)
+ *   1. framesDecoded  (nur WebRTC, dafür der einzige echte Beweis, dass
+ *                      ein BILD dekodiert wurde)
+ *   2. video.currentTime  (gilt für beide Transporte, ist aber nur ein
+ *                      Indiz: er läuft auch weiter, wenn nur noch Ton
+ *                      ankommt)
  *
- * Eines von beiden genügt als Beweis, dass Bild ankommt. Stehen beide
- * still, gilt der Stream als tot — auch wenn der Browser das anders sieht.
+ * Sobald framesDecoded verfügbar ist, entscheidet ausschließlich dieser
+ * Wert. Würden wir „eines von beiden genügt" rechnen, hielte ein
+ * weiterlaufender Audiotrack das Bild künstlich am Leben: currentTime
+ * tickt, framesDecoded steht — und die Kachel zeigt weiter ein
+ * eingefrorenes Standbild als „Live". Genau der Zustand, den diese Datei
+ * verhindern soll. Nur wenn framesDecoded nichts liefert (MSE, oder ein
+ * reiner Audiostream ohne inbound-rtp-Videoreport), fallen wir auf
+ * currentTime zurück.
  */
 
 import type { Connection } from './transport'
@@ -60,18 +69,21 @@ export class Watchdog {
     if (this.busy) return
     this.busy = true
     try {
-      let alive = false
-
       const t = this.video.currentTime
-      if (t !== this.lastTime) {
-        this.lastTime = t
-        alive = true
-      }
+      const timeMoved = t !== this.lastTime
+      this.lastTime = t
 
       const frames = await this.conn.framesDecoded()
-      if (frames !== null && frames !== this.lastFrames) {
+
+      // framesDecoded schlägt currentTime, wo es das gibt — siehe Kopf
+      // der Datei. Ein Standbild mit laufendem Ton darf nicht als „Live"
+      // durchgehen.
+      let alive: boolean
+      if (frames !== null) {
+        alive = frames !== this.lastFrames
         this.lastFrames = frames
-        alive = true
+      } else {
+        alive = timeMoved
       }
 
       if (alive) {

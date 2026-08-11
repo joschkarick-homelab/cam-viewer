@@ -79,6 +79,15 @@ export class CamTile {
 
   async connect() {
     if (this.disposed) return
+
+    // Einen noch laufenden Reconnect-Timer verwerfen. Ohne das reißt er
+    // eine gerade wiederhergestellte Verbindung sofort wieder ab: kommt
+    // die App aus dem Hintergrund zurück, ruft main.ts connect() auf,
+    // während der alte 15-Sekunden-Timer noch pendelt — und der macht
+    // dann kurz nach dem Wiederverbinden ein zweites Mal teardown().
+    clearTimeout(this.retryTimer)
+    this.retryTimer = undefined
+
     this.teardown()
     this.setState('connecting')
 
