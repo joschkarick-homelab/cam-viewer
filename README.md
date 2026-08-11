@@ -63,8 +63,38 @@ systemctl daemon-reload && systemctl enable --now go2rtc
 In `go2rtc.yaml` ausfüllen: `TAPO_CLOUD_PASSWORD` und die LAN-IP der VM
 unter `webrtc.candidates`.
 
+Vorher einmalig in der Tapo-App: **Ich → Tapo Lab → Third-Party
+Compatibility → an.** Steht der Schalter aus, scheitert die Anmeldung
+auch mit dem richtigen Passwort.
+
+#### Welches Passwort?
+
+Das deines **TP-Link-/Tapo-Kontos** — das mit der E-Mail-Adresse, mit
+dem du dich in der App anmeldest.
+
+| | wofür | wo |
+|---|---|---|
+| **Konto-Passwort** | `tapo://` | App-Login, nirgends ablesbar |
+| **Kamerakonto** | `rtsp://` | Geräteeinstellungen → Erweitert |
+
+Die beiden zu verwechseln ist der häufigste Grund, warum `tapo://`
+scheitert. Das Konto-Passwort lässt sich nirgends anzeigen; wenn du es
+nicht mehr weißt, in der App unter *Ich → Konto* zurücksetzen. Bei
+geteilten Cams gilt das Passwort des Besitzer-Kontos.
+
+Wer das Klartext-Passwort nicht auf der VM liegen haben will, trägt
+stattdessen dessen Hash ein — `tapo://admin:<SHA256 in Großbuchstaben>@<IP>`.
+Gegenüber der Kamera ist der Hash passwortäquivalent, aber das
+TP-Link-Kontopasswort (und damit der Zugang zu allen TP-Link-Geräten)
+steht dann nicht mehr in der Datei. Details in `go2rtc/go2rtc.yaml`.
+
 **Erst weitermachen, wenn `http://<VM-IP>:1984` alle drei Cams mit Bild
 und Ton zeigt.** Das trennt Kamera- von App-Problemen.
+
+Klappt eine Cam partout nicht — Symptom `Unable to find token in
+response` deutet auf eine Firmware, die das Protokoll nicht spricht —,
+die vorbereitete `rtsp://`-Zeile aktivieren. Dann läuft alles außer dem
+Mikrofon-Rückkanal.
 
 ### 2. App deployen
 
