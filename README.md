@@ -95,7 +95,13 @@ nicht mehr weißt, in der App unter *Ich → Konto* zurücksetzen. Bei
 geteilten Cams gilt das Passwort des Besitzer-Kontos.
 
 Wer das Klartext-Passwort nicht auf der VM liegen haben will, trägt
-stattdessen dessen Hash ein — `tapo://admin:<SHA256 in Großbuchstaben>@<IP>`.
+stattdessen dessen Hash ein — `tapo://admin:<HASH in Großbuchstaben>@<IP>`.
+Das `admin:` ist Pflicht: ohne Benutzername behandelt go2rtc den Wert
+als Klartext-Passwort und hasht ihn ein zweites Mal, Ergebnis
+`unauthorized`. Ob die Cam MD5 oder SHA256 will, entscheidet sie selbst
+(`encrypt_type`) — also erst mit Klartext verifizieren, dass sie läuft,
+dann umstellen.
+
 Gegenüber der Kamera ist der Hash passwortäquivalent, aber das
 TP-Link-Kontopasswort (und damit der Zugang zu allen TP-Link-Geräten)
 steht dann nicht mehr in der Datei. Details in `go2rtc/go2rtc.yaml`.

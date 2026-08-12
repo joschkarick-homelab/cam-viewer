@@ -61,17 +61,31 @@ webrtc:
 #
 # ── Klartext vermeiden (optional) ──────────────────────────────────
 #
-# Statt des Passworts nimmt go2rtc auch dessen Hash in Großbuchstaben:
+# Statt des Passworts nimmt go2rtc auch dessen Hash in Großbuchstaben.
+# Das "admin:" davor ist dabei PFLICHT:
 #
-#   tapo://admin:GROSSBUCHSTABEN-SHA256@192.168.2.52
+#   tapo://admin:GROSSBUCHSTABEN-HASH@192.168.2.52   ← richtig
+#   tapo://GROSSBUCHSTABEN-HASH@192.168.2.52         ← "unauthorized"
 #
-#   printf '%s' 'DEINPASSWORT' | sha256sum | cut -d' ' -f1 | tr -d '\n' \
-#     | tr '[:lower:]' '[:upper:]'
-#   (Zeile mit einem Leerzeichen beginnen, dann landet sie bei den
-#    üblichen Shells nicht in der History.)
+# Ohne Benutzernamen landet der Wert in Go's URL-Parsing als Username
+# mit leerem Passwort, und genau darauf prüft pkg/tapo/client.go: ein
+# einzelnes Credential gilt immer als KLARTEXT-Passwort und wird von
+# go2rtc noch einmal gehasht. Dein Hash wird dann gehasht.
 #
-# MD5 geht auch, neuere Firmware verlangt aber SHA256 — bei aktuellen
-# C100/C200 also gleich SHA256 nehmen.
+# Hash erzeugen (liest verdeckt, landet nicht in der Shell-History):
+#
+#   read -rs -p 'Tapo-Passwort: ' p && echo && \
+#     printf '%s' "$p" | sha256sum | cut -d' ' -f1 | tr '[:lower:]' '[:upper:]'; unset p
+#
+# printf, nicht echo — echo hängt ein \n an und hasht es mit. Das
+# Ergebnis sieht aus wie ein gültiger Hash und wird trotzdem abgelehnt.
+#
+# MD5 oder SHA256? Das entscheidet die KAMERA, nicht das Modell: meldet
+# sie encrypt_type="3", ist es SHA256, sonst MD5. In der Klartextform
+# prüft go2rtc das selbst ab — in der Hashform musst du es treffen, und
+# ein falscher Algorithmus sieht exakt wie ein falsches Passwort aus.
+# Deshalb: erst mit Klartext verifizieren, dass die Cam überhaupt läuft,
+# dann auf den Hash umstellen. Für MD5 oben md5sum statt sha256sum.
 #
 # Was das bringt und was nicht: gegenüber der KAMERA ist der Hash
 # passwortäquivalent, dort gewinnst du nichts. Aber dein
