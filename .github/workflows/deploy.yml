@@ -48,6 +48,19 @@ jobs:
             [ -n "${!key}" ] || echo "::warning::$key ist nicht gesetzt — es gilt der Default aus docker-compose.prod.yml."
           done
 
+          # GO2RTC_HOST landet unverändert in "proxy_pass http://…;".
+          # Ohne Port proxyt nginx nach 80 statt 1984 — die App lädt
+          # normal, nur die Streams bleiben tot. Sieht aus wie ein
+          # Kameraproblem, ist aber eine fehlende ":1984".
+          if [ -n "$GO2RTC_HOST" ] && ! printf '%s' "$GO2RTC_HOST" | grep -qE '^[A-Za-z0-9._-]+:[0-9]+$'; then
+            echo "::error::GO2RTC_HOST muss die Form host:port haben, z.B. 192.168.2.166:1984."
+            exit 1
+          fi
+          if [ -n "$HOST_PORT" ] && ! printf '%s' "$HOST_PORT" | grep -qE '^[0-9]+$'; then
+            echo "::error::HOST_PORT muss eine reine Portnummer sein, z.B. 8091."
+            exit 1
+          fi
+
           if [ ${#missing[@]} -gt 0 ]; then
             echo "::error::Fehlt: ${missing[*]}"
             echo

@@ -194,13 +194,32 @@ das ab und nennt die fehlenden Namen.
 | `DEPLOY_USER` | `root` | ggf. schon auf Org-Ebene da |
 | `DEPLOY_HOST` | LXC im Tailnet | ggf. schon auf Org-Ebene da |
 | `HOST_PORT` | `8091` | **neu** — darf nicht mit Qwixx (8090) kollidieren |
-| `GO2RTC_HOST` | `192.168.2.166:1984` | **neu** — die Scrypted-VM |
+| `GO2RTC_HOST` | `192.168.2.166:1984` | **neu** — **mit Port**, siehe unten |
 
 **→ Variables:**
 
 | Variable | Beispiel |
 |---|---|
-| `DEPLOY_PATH` | `/opt/stacks/cam-viewer` |
+| `DEPLOY_PATH` | `/opt/apps/cam-viewer` |
+
+**`GO2RTC_HOST` braucht den Port.** Der Wert landet unverändert in
+`proxy_pass http://…;` — steht dort nur `192.168.2.166`, proxyt nginx
+nach Port 80 statt 1984. Die App lädt dann ganz normal, weil die
+statischen Dateien nichts mit dem Proxy zu tun haben, und nur die
+Streams schlagen fehl. Ein Fehlerbild, das nach Kamera- oder
+Netzwerkproblem aussieht und keines ist. Der Preflight prüft das Format
+inzwischen ab.
+
+Was im laufenden Container tatsächlich ankam, zeigt:
+
+```bash
+docker exec cam-viewer grep proxy_pass /etc/nginx/conf.d/default.conf
+```
+
+Und: **ein geändertes Secret wirkt erst beim nächsten Deploy.**
+`stack.env` wird zur Deploy-Zeit gerendert und in die LXC kopiert; der
+laufende Container kennt nur den Wert von damals. Nach dem Korrigieren
+also *Actions → Deploy to Homelab → Run workflow*.
 
 Außerdem: das GHCR-Package nach dem ersten Build auf **privat** stellen
 und der LXC Lesezugriff geben (Deploy-Token oder `docker login ghcr.io`),
