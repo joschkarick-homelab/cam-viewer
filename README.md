@@ -170,11 +170,18 @@ Deploy automatisch mit ausgerollt.
 
 ### Einmalig einzurichten
 
-Das Repo liegt in derselben Org wie `color-dices`. Sind
-`TS_OAUTH_CLIENT_ID`, `TS_OAUTH_SECRET`, `DEPLOY_USER` und
-`DEPLOY_HOST` dort als **Organization Secrets** hinterlegt, greifen sie
-hier automatisch — dann sind nur die beiden unteren Zeilen zu setzen.
-Liegen sie dagegen pro Repo, müssen alle sechs neu angelegt werden.
+Das Repo liegt in derselben Org wie `color-dices` und nutzt dieselben
+Secret-Namen. **Organization Secrets gelten aber nicht automatisch für
+jedes Repo der Org.** Jedes hat unter *Repository access* entweder „All
+repositories" oder „Selected repositories" stehen — im zweiten Fall muss
+`cam-viewer` dort ausdrücklich eingetragen werden, sonst kommt der Wert
+im Workflow als leerer String an.
+
+Das ist die unauffälligste Fehlerquelle im ganzen Deploy: GitHub lässt
+leere Inputs kommentarlos weg, und die Tailscale-Action meldet dann nur
+„Please provide either an auth key, OAuth secret and tags…" — ohne zu
+sagen, welcher Wert fehlt. Der Preflight-Schritt in `deploy.yml` fängt
+das ab und nennt die fehlenden Namen.
 
 **Settings → Secrets and variables → Actions → Secrets:**
 
