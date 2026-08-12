@@ -185,9 +185,20 @@ andere wird zu 500. Die Zahl steht in `docker logs npmplus`:
 Direkt nachstellen:
 
 ```bash
-curl -i -H 'X-Original-URL: https://cam.DEINE-DOMAIN.tld/' \
+curl -i -H 'X-Forwarded-Host: cam.DEINE-DOMAIN.tld' \
   http://<authentik-IP>:<port>/outpost.goauthentik.io/auth/nginx
 ```
+
+Der Header ist hier der entscheidende Teil, nicht Beiwerk. Der Outpost
+sucht die Anwendung über den Host (`lookupApp` in
+`internal/outpost/proxyv2/handlers.go`), und `GetHost` bevorzugt dabei
+`X-Forwarded-Host` vor `Host`. NPMplus setzt den auf die App-Domain.
+Ohne den Header testest du gegen die IP von authentik, findest
+erwartungsgemäß keine Anwendung und bekommst die 404-Seite der
+Weboberfläche — ein Fehlschlag, der wie ein Konfigurationsproblem
+aussieht und keines ist. Erkennbar ist dieser Fall an den Antwort-Headern:
+`Content-Language` und `Vary: Accept-Language, Cookie` kommen von Django,
+nicht vom Outpost.
 
 `401` ist hier das gesunde Ergebnis. Kommt `404`, kennt der Outpost den
 Host nicht. In authentik müssen dafür **drei** Dinge stehen:
