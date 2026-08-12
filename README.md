@@ -176,6 +176,25 @@ dass der Weg derzeit nur mit dem **eingebetteten** Outpost funktioniert;
 bei einem eigenständigen Proxy-Outpost bleibt der Host zwar Online, der
 Login-Redirect kommt aber nicht.
 
+**HTTP 500 nach dem Aktivieren?** Dann hat der Outpost auf die
+Prüfanfrage etwas geantwortet, mit dem nginx nichts anfangen kann.
+`auth_request` kennt nur 2xx (durchlassen), 401/403 (ablehnen) — alles
+andere wird zu 500. Die Zahl steht in `docker logs npmplus`:
+`auth request unexpected status: …`.
+
+Direkt nachstellen:
+
+```bash
+curl -i -H 'X-Original-URL: https://cam.DEINE-DOMAIN.tld/' \
+  http://<authentik-IP>:<port>/outpost.goauthentik.io/auth/nginx
+```
+
+`401` ist hier das gesunde Ergebnis. Kommt `404`, kennt der Outpost den
+Host nicht — dann fehlt in authentik der Proxy Provider (*Forward auth,
+single application*, External host = die Domain), die zugehörige
+Application, oder — am häufigsten — deren **Zuweisung zum Outpost**
+unter *Applications → Outposts*.
+
 #### Intern ohne Login
 
 Über eine **Access List** (nicht über Advanced):
