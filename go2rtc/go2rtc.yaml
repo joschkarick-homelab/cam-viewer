@@ -28,12 +28,13 @@ rtsp:
 webrtc:
   listen: ":8555" # TCP + UDP
   candidates:
-    # TODO: LAN-IP dieser VM eintragen. Ohne diesen Eintrag findet der
-    # Browser im LAN keinen direkten Pfad und fällt unnötig auf MSE zurück.
-    - 192.168.2.10:8555
+    # Die LAN-IP DIESER VM. Ohne diesen Eintrag findet der Browser im LAN
+    # keinen direkten Pfad und fällt unnötig auf MSE zurück.
+    # Zieht die VM um, muss der Wert hier mit — und GO2RTC_HOST im Repo.
+    - 192.168.2.166:8555
     # Zusätzlich TCP-Kandidat, falls ein Client kein UDP darf (manche
     # Gäste-WLANs, restriktive Firewalls):
-    - 192.168.2.10:8555/tcp
+    - 192.168.2.166:8555/tcp
 
 # ── Kameras ────────────────────────────────────────────────────────
 #

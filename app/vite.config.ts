@@ -17,7 +17,7 @@ export default defineConfig({
     // App auch im Dev-Server same-origin läuft (spart CORS-Sonderfälle).
     proxy: {
       '/api': {
-        target: 'http://192.168.2.10:1984',
+        target: 'http://192.168.2.166:1984',
         ws: true,
         changeOrigin: true,
       },
