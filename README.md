@@ -190,10 +190,18 @@ curl -i -H 'X-Original-URL: https://cam.DEINE-DOMAIN.tld/' \
 ```
 
 `401` ist hier das gesunde Ergebnis. Kommt `404`, kennt der Outpost den
-Host nicht — dann fehlt in authentik der Proxy Provider (*Forward auth,
-single application*, External host = die Domain), die zugehörige
-Application, oder — am häufigsten — deren **Zuweisung zum Outpost**
-unter *Applications → Outposts*.
+Host nicht. In authentik müssen dafür **drei** Dinge stehen:
+
+1. **Proxy Provider**, Modus *Forward auth (single application)*,
+   External host = `https://cam.DEINE-DOMAIN.tld` (mit Schema, ohne Pfad)
+2. **Application**, die diesen Provider nutzt
+3. **Zuweisung zum Outpost**: *Applications → Outposts →
+   `authentik Embedded Outpost` → Edit → Feld Applications*
+
+Schritt 3 passiert **nicht** automatisch und ist der übliche Grund für
+den 404: die Anwendungsliste des eingebetteten Outposts ist anfangs
+leer, er kann die Anfrage also keinem Provider zuordnen. Nach dem
+Zuweisen lädt er selbstständig neu.
 
 #### Intern ohne Login
 
