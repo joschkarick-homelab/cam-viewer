@@ -34,6 +34,7 @@ export class CamTile {
   private video: HTMLVideoElement
   private badge: HTMLElement
   private label: HTMLElement
+  private reason: HTMLElement
 
   private conn: Connection | null = null
   private dog: Watchdog | null = null
@@ -65,7 +66,13 @@ export class CamTile {
     this.label.className = 'label'
     this.label.textContent = cam.name
 
-    this.el.append(this.video, this.label, this.badge)
+    // Zeigt den letzten Fehlergrund, sobald die Kachel rot ist. Auf dem
+    // Fire Tablet gibt es keine Entwicklerkonsole — ohne diese Zeile
+    // bleibt dort nur "Verbindung weg" ohne jeden Anhaltspunkt.
+    this.reason = document.createElement('div')
+    this.reason.className = 'reason'
+
+    this.el.append(this.video, this.label, this.badge, this.reason)
     this.setState('connecting')
   }
 
@@ -109,13 +116,34 @@ export class CamTile {
       this.setState('live')
 
       this.dog = new Watchdog(this.video, this.conn, () => {
+        // Kein throw, also auch kein Eintrag in den Dev-Tools. Bei
+        // WebRTC ist das der Normalfall eines kaputten Medienpfads:
+        // die Signalisierung klappt, nur es kommt nie ein Bild.
+        this.note(`keine Frames (${this.transport})`)
         this.setState('stalled')
         this.scheduleRetry()
       })
       this.dog.start()
-    } catch {
-      if (!signal.aborted) this.scheduleRetry()
+    } catch (err) {
+      if (!signal.aborted) {
+        this.note(err instanceof Error ? err.message : String(err))
+        this.scheduleRetry()
+      }
     }
+  }
+
+  /**
+   * Hält den letzten Fehlergrund fest — in der Konsole und auf der
+   * Kachel.
+   *
+   * Vorher stand hier ein blankes `catch {}`. Das hat jeden Grund
+   * verschluckt: die Kachel wurde rot, die Konsole blieb leer, und beim
+   * Einrichten war nicht zu unterscheiden, ob go2rtc nicht erreichbar
+   * ist, der Stream-Name nicht stimmt oder nur keine Frames ankommen.
+   */
+  private note(msg: string) {
+    console.warn(`[cam-viewer/${this.cam.id}] ${msg}`)
+    this.reason.textContent = msg
   }
 
   private scheduleRetry() {

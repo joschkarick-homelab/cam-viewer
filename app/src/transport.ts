@@ -44,6 +44,24 @@ export async function connectWebRTC(
   }
   signal.addEventListener('abort', cleanup, { once: true })
 
+  // Der Medienpfad kann scheitern, ohne dass irgendetwas wirft: POST
+  // /api/webrtc liefert brav eine SDP-Answer, die Kachel geht kurz auf
+  // "Live", und erst der Watchdog merkt, dass nie ein Bild kommt. In
+  // den Dev-Tools steht dann nur ein erfolgreicher 200er.
+  //
+  // Typische Ursache im LAN: webrtc.candidates in go2rtc.yaml zeigt auf
+  // die falsche IP, oder Port 8555 ist nicht erreichbar. Beides sieht
+  // man nur hier.
+  pc.addEventListener('iceconnectionstatechange', () => {
+    const s = pc.iceConnectionState
+    if (s === 'failed' || s === 'disconnected') {
+      console.warn(
+        `[cam-viewer/${src}] ICE ${s} — kein Medienpfad zu go2rtc:8555. ` +
+        `Prüfen: webrtc.candidates in go2rtc.yaml und Erreichbarkeit von Port 8555.`,
+      )
+    }
+  })
+
   const stream = new MediaStream()
   pc.addEventListener('track', (ev) => {
     stream.addTrack(ev.track)

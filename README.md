@@ -8,7 +8,7 @@ Ausgelegt auf **Babycam-Betrieb**: Bildschirm bleibt an, Verbindungs-
 abbrüche sind unübersehbar, und ein eingefrorenes Bild wird niemals als
 Livebild dargestellt.
 
-Bundle: ~3,7 kB JS + 1,1 kB CSS (gzip), kein Framework.
+Bundle: ~3,9 kB JS + 1,2 kB CSS (gzip), kein Framework.
 
 ---
 
@@ -246,6 +246,34 @@ Tap auf eine Kachel → Vollbild. Ton läuft immer nur auf einer Cam.
 | 🔴 Verbindung weg | mehrere Fehlversuche, Rahmen pulsiert, **Alarm piept** |
 
 Der Alarm verstummt erst, wenn keine Kamera mehr im roten Zustand ist.
+
+Ist eine Kachel nicht live, steht der letzte Fehlergrund klein darunter
+— dieselbe Meldung landet mit Präfix `[cam-viewer/<cam>]` in der
+Browser-Konsole. Auf dem Fire Tablet gibt es keine Dev-Tools, deshalb
+steht sie auch auf der Kachel.
+
+### Wenn kein Bild kommt
+
+Von außen nach innen, jeder Schritt schließt eine Ebene aus:
+
+| Test | Was er bedeutet |
+|---|---|
+| `?transport=mse` anhängen | läuft es damit, liegt es an WebRTC — also an `webrtc.candidates` oder Port 8555, nicht am Proxy |
+| `http://<host>/api/streams` im Browser | JSON mit den Stream-Namen = der `/api`-Proxy erreicht go2rtc |
+| `http://<VM-IP>:1984` direkt | go2rtcs eigene Oberfläche. Kein Bild hier = das Problem liegt vor der App |
+| `journalctl -u go2rtc -f` auf der VM | die Logs, die nginx **nicht** zeigt |
+
+Wichtig zur Einordnung: die Docker-Logs des Containers sind nginx-Logs.
+Ein `200` auf `POST /api/webrtc` heißt nur, dass go2rtc eine SDP-Answer
+geliefert hat — über den anschließenden Medienpfad sagt er nichts. Der
+läuft bei WebRTC direkt zu Port 8555 und nie durch nginx. Ein kaputter
+Medienpfad sieht in den Container-Logs deshalb aus wie Erfolg.
+
+Der verräterische Fall ist die Meldung `ICE failed` in der Konsole:
+Signalisierung in Ordnung, Medien kommen nicht durch. Fast immer zeigt
+dann `webrtc.candidates` in `/etc/go2rtc/go2rtc.yaml` auf die falsche
+IP. **Die Datei liegt auf der VM und wird nicht mitdeployt** — eine
+Korrektur im Repo ändert dort nichts.
 
 ### URL-Parameter
 
