@@ -20,6 +20,46 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Fehlt ein Secret, meldet die Tailscale-Action nur "Please provide
+      # either an auth key, OAuth secret and tags, ...". Das sagt weder,
+      # WELCHER Wert fehlt, noch dass überhaupt einer leer ist — GitHub
+      # lässt leere Inputs im with:-Block stillschweigend weg. Dieser
+      # Schritt macht daraus eine Meldung, die den Weg zur Lösung nennt.
+      - name: Preflight — Secrets vorhanden?
+        env:
+          TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          TS_OAUTH_SECRET: ${{ secrets.TS_OAUTH_SECRET }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          HOST_PORT: ${{ secrets.HOST_PORT }}
+          GO2RTC_HOST: ${{ secrets.GO2RTC_HOST }}
+        run: |
+          missing=()
+          for key in TS_OAUTH_CLIENT_ID TS_OAUTH_SECRET DEPLOY_USER DEPLOY_HOST DEPLOY_PATH; do
+            [ -n "${!key}" ] || missing+=("$key")
+          done
+
+          # Diese beiden sind optional: docker-compose.prod.yml hat für
+          # beide einen Default. Der Hinweis erspart die Suche, wenn der
+          # Container später auf dem falschen Port oder gegen die falsche
+          # go2rtc-Instanz läuft.
+          for key in HOST_PORT GO2RTC_HOST; do
+            [ -n "${!key}" ] || echo "::warning::$key ist nicht gesetzt — es gilt der Default aus docker-compose.prod.yml."
+          done
+
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Fehlt: ${missing[*]}"
+            echo
+            echo "Org-Secrets gelten NICHT automatisch für jedes Repo der Org."
+            echo "Prüfen unter: Organization → Settings → Secrets and variables"
+            echo "→ Actions → <Secret> → Repository access."
+            echo "Steht dort 'Selected repositories', muss cam-viewer in der"
+            echo "Liste stehen. DEPLOY_PATH ist eine Variable, kein Secret."
+            exit 1
+          fi
+          echo "Alle benötigten Secrets und Variables sind gesetzt."
+
       - name: Connect to Tailscale
         uses: tailscale/github-action@v4
         with:
