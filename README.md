@@ -152,16 +152,29 @@ Oberfläche am Offline-Status) und in `docker logs npmplus`.
 #### authentik
 
 NPMplus hat authentik eingebaut, es braucht **keinen** handgeschriebenen
-Block:
+Block. Die Einstellung liegt aber an zwei Stellen, und die wichtigere ist
+nicht im Proxy Host:
 
-| Feld | Wert |
-|---|---|
-| Auth-Request-Provider | `authentik` |
-| Auth-Request-Upstream | `http://<authentik-IP>:9000` |
+**1. In der `compose.yaml` von NPMplus** die Adresse des Outposts setzen
+und den Container neu erzeugen:
 
-Beim Upstream nur `host:port` eintragen, **ohne** den Pfad
-`/outpost.goauthentik.io` — den hängt NPMplus selbst an. Der Port ist
-der des Proxy-Outposts, nicht zwingend der der authentik-Oberfläche.
+```yaml
+- "AUTH_REQUEST_AUTHENTIK_UPSTREAM=http://<authentik-IP>:<port>"
+```
+
+**2. Im Proxy Host** unter *Auth Request* `authentik` wählen.
+
+Das Dropdown allein reicht nicht — ohne die Variable bleibt der Upstream
+leer. Das Format ist streng: **Schema + Host + Port, kein Pfad.**
+`/outpost.goauthentik.io` hängt NPMplus selbst an; steht der Pfad in der
+Variablen, lehnt `envs.sh` sie beim Start mit einer entsprechenden
+Meldung ab.
+
+Der Port ist der, unter dem der Outpost antwortet — nicht zwingend der
+der authentik-Oberfläche. NPMplus merkt in seiner `compose.yaml` an,
+dass der Weg derzeit nur mit dem **eingebetteten** Outpost funktioniert;
+bei einem eigenständigen Proxy-Outpost bleibt der Host zwar Online, der
+Login-Redirect kommt aber nicht.
 
 #### Intern ohne Login
 
