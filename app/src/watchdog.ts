@@ -27,8 +27,22 @@
 
 import type { Connection } from './transport'
 
-/** Nach so vielen Millisekunden ohne Lebenszeichen gilt der Stream als tot. */
+/** Nach so vielen Millisekunden ohne Lebenszeichen gilt ein LAUFENDER Stream als tot. */
 const STALL_MS = 3000
+
+/**
+ * Geduld bis zum allerersten Frame.
+ *
+ * Bis ein Bild ankommt, passiert einiges: go2rtc meldet sich bei der Cam
+ * an, ICE handelt einen Pfad aus, DTLS gibt sich die Hand. Zusammen sind
+ * das bei WebRTC schnell mehrere Sekunden — deutlich mehr als bei MSE,
+ * wo die Daten sofort durch den bestehenden WebSocket laufen.
+ *
+ * Mit denselben 3 s wie beim laufenden Betrieb würden wir eine völlig
+ * gesunde WebRTC-Verbindung abschießen, bevor sie das erste Bild
+ * liefern konnte — und der Reconnect fängt wieder bei null an.
+ */
+const STARTUP_MS = 12000
 
 /** Prüfintervall. 1 s ist der Kompromiss aus Reaktionszeit und Ruhe auf schwacher Hardware. */
 const TICK_MS = 1000
@@ -37,19 +51,27 @@ export class Watchdog {
   private timer: number | undefined
   private lastProgress = 0
   private lastTime = -1
-  private lastFrames = -1
+  private lastFrames: number | null = null
   private busy = false
+
+  /** Basiswerte erfasst? Der erste Tick misst nur, er wertet noch nicht. */
+  private started = false
+
+  /** Kam jemals ein Bild an? Trennt Anlaufphase von laufendem Betrieb. */
+  private everAlive = false
 
   constructor(
     private video: HTMLVideoElement,
     private conn: Connection,
     private onStall: () => void,
+    /** Feuert einmalig beim ersten belegten Lebenszeichen. */
+    private onAlive: () => void,
   ) {}
 
   start() {
     this.lastProgress = Date.now()
-    this.lastTime = -1
-    this.lastFrames = -1
+    this.started = false
+    this.everAlive = false
     this.timer = window.setInterval(() => void this.tick(), TICK_MS)
   }
 
@@ -70,10 +92,19 @@ export class Watchdog {
     this.busy = true
     try {
       const t = this.video.currentTime
-      const timeMoved = t !== this.lastTime
-      this.lastTime = t
-
       const frames = await this.conn.framesDecoded()
+
+      // Der erste Durchlauf nimmt nur Maß. Ohne das zählte schon der
+      // Sprung von „noch nichts gemessen" auf den ersten Messwert als
+      // Lebenszeichen — die Anlaufphase wäre sofort vorbei, und ein
+      // Stream, der nie ein Bild liefert, sähe eine Sekunde lang gesund
+      // aus.
+      if (!this.started) {
+        this.started = true
+        this.lastTime = t
+        this.lastFrames = frames
+        return
+      }
 
       // framesDecoded schlägt currentTime, wo es das gibt — siehe Kopf
       // der Datei. Ein Standbild mit laufendem Ton darf nicht als „Live"
@@ -83,12 +114,17 @@ export class Watchdog {
         alive = frames !== this.lastFrames
         this.lastFrames = frames
       } else {
-        alive = timeMoved
+        alive = t !== this.lastTime
       }
+      this.lastTime = t
 
       if (alive) {
         this.lastProgress = Date.now()
-      } else if (this.staleFor() > STALL_MS) {
+        if (!this.everAlive) {
+          this.everAlive = true
+          this.onAlive()
+        }
+      } else if (this.staleFor() > (this.everAlive ? STALL_MS : STARTUP_MS)) {
         this.stop() // nur einmal melden — der Aufrufer baut neu auf
         this.onStall()
       }

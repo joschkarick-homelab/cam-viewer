@@ -174,3 +174,21 @@ button.on {
 
 /* Stummschaltung sichtbar machen */
 .tile[data-muted="false"] .label::after { content: " 🔊"; }
+
+/* Fehlergrund — nur sichtbar, wenn die Kachel ohnehin nicht live ist.
+   Auf dem Fire Tablet gibt es keine Konsole; ohne diese Zeile stünde
+   dort nur "Verbindung weg" ohne jeden Anhaltspunkt. */
+.reason {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 26px;
+  font-size: 11px;
+  color: var(--dim);
+  text-shadow: 0 1px 3px #000;
+  pointer-events: none;
+  overflow-wrap: anywhere;
+}
+
+.tile[data-state="live"] .reason,
+.tile[data-state="connecting"] .reason { display: none; }
