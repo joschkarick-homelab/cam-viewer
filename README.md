@@ -15,7 +15,7 @@ Bundle: ~3,7 kB JS + 1,1 kB CSS (gzip), kein Framework.
 ## Architektur
 
 ```
-Tapo C100/C200 ──tapo://──► go2rtc  (Scrypted-VM, 192.168.2.10)
+Tapo C100/C200 ──tapo://──► go2rtc  (Scrypted-VM, 192.168.2.166)
                             │  ├─ HomeKit
                             │  └─ :1984 / :8555
                             │
@@ -72,8 +72,10 @@ schreibt die HomeKit-Pairings dort hinein. Aus demselben Grund steht
 `/etc/go2rtc` in den `ReadWritePaths` der Unit — `ProtectSystem=strict`
 würde das sonst blockieren.
 
-In `go2rtc.yaml` ausfüllen: `TAPO_CLOUD_PASSWORD` und die LAN-IP der VM
-unter `webrtc.candidates`.
+In `go2rtc.yaml` auszufüllen ist nur noch `TAPO_CLOUD_PASSWORD`. Die
+LAN-IP der VM unter `webrtc.candidates` steht bereits auf
+`192.168.2.166` — zieht die VM um, gehört sie dort **und** im Secret
+`GO2RTC_HOST` geändert.
 
 Vorher einmalig in der Tapo-App: **Ich → Tapo Lab → Third-Party
 Compatibility → an.** Steht der Schalter aus, scheitert die Anmeldung
@@ -192,7 +194,7 @@ das ab und nennt die fehlenden Namen.
 | `DEPLOY_USER` | `root` | ggf. schon auf Org-Ebene da |
 | `DEPLOY_HOST` | LXC im Tailnet | ggf. schon auf Org-Ebene da |
 | `HOST_PORT` | `8091` | **neu** — darf nicht mit Qwixx (8090) kollidieren |
-| `GO2RTC_HOST` | `192.168.2.10:1984` | **neu** — die Scrypted-VM |
+| `GO2RTC_HOST` | `192.168.2.166:1984` | **neu** — die Scrypted-VM |
 
 **→ Variables:**
 

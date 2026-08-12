@@ -9,7 +9,7 @@ services:
     environment:
       # Adresse von go2rtc auf der Scrypted-VM, Form "host:port".
       # Kommt aus stack.env, gesetzt über das Repo-Secret GO2RTC_HOST.
-      GO2RTC_HOST: "${GO2RTC_HOST:-192.168.2.10:1984}"
+      GO2RTC_HOST: "${GO2RTC_HOST:-192.168.2.166:1984}"
 
     # cams.json ist im Image enthalten — Kameras ändern heißt also
     # committen und pushen, der Deploy läuft dann von selbst.

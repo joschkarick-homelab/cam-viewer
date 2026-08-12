@@ -1,7 +1,7 @@
 {
   "_hinweis": "Zur Laufzeit geladen — Änderungen brauchen KEINEN neuen Build. Datei liegt nach dem Deploy neben index.html.",
 
-  "_go2rtc": "Leer lassen, wenn NPMplus /api an go2rtc weiterreicht (empfohlen: gleicher Origin, kein CORS). Sonst z.B. http://192.168.2.10:1984",
+  "_go2rtc": "Leer lassen, wenn NPMplus /api an go2rtc weiterreicht (empfohlen: gleicher Origin, kein CORS). Sonst z.B. http://192.168.2.166:1984",
   "go2rtc": "",
 
   "cams": [
