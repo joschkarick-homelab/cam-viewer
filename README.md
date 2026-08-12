@@ -8,7 +8,7 @@ Ausgelegt auf **Babycam-Betrieb**: Bildschirm bleibt an, Verbindungs-
 abbrüche sind unübersehbar, und ein eingefrorenes Bild wird niemals als
 Livebild dargestellt.
 
-Bundle: ~4,1 kB JS + 1,2 kB CSS (gzip), kein Framework.
+Bundle: ~4,2 kB JS + 1,2 kB CSS (gzip), kein Framework.
 
 ---
 
@@ -290,6 +290,38 @@ Signalisierung in Ordnung, Medien kommen nicht durch. Fast immer zeigt
 dann `webrtc.candidates` in `/etc/go2rtc/go2rtc.yaml` auf die falsche
 IP. **Die Datei liegt auf der VM und wird nicht mitdeployt** — eine
 Korrektur im Repo ändert dort nichts.
+
+### Als App installieren
+
+**Voraussetzung ist HTTPS.** Über `http://<IP>:8091` bietet kein Browser
+die Installation an, und Wake Lock bleibt ebenfalls aus — beides braucht
+einen Secure Context. Es geht also erst nach Schritt 3 (NPMplus), unter
+`https://cam.DEINE-DOMAIN.tld`.
+
+| Plattform | Weg |
+|---|---|
+| **Windows** (Edge/Chrome) | Installationssymbol rechts in der Adresszeile, oder ⋯ → *Apps* → *Diese Website als App installieren* |
+| **macOS** (Safari 17+) | *Ablage → Zum Dock hinzufügen* |
+| **macOS** (Chrome/Edge) | Installationssymbol in der Adresszeile |
+| **iOS/iPadOS** | Teilen → *Zum Home-Bildschirm* |
+| **Android** | Menü → *App installieren* |
+
+Chrome und Edge verlangen für das Angebot zusätzlich einen Service
+Worker mit Fetch-Handler; Safari nicht. Deshalb liegt einer in
+`app/public/sw.js` — **network-first**, nicht cache-first. Der übliche
+PWA-Ansatz liefert die App-Shell aus dem Cache, was hier die falsche
+Abwägung wäre: nach einem Deploy liefe alter Code weiter, und genau in
+diesem Code stecken Watchdog, Ausgrauen und Alarm. Ein alter Stand, der
+ein Standbild als Livebild zeigt, wäre schlimmer als eine Sekunde
+Ladezeit. Der Cache greift nur, wenn das Netz gar nicht antwortet.
+
+Als installierte App startet sie ohne Adresszeile in einem eigenen
+Fenster (`display_override: standalone`), auf Mobilgeräten im Vollbild.
+
+**Zum Danebenstellen am Schreibtisch** lohnt eine eigene
+Browser-Profilinstanz oder eben die installierte App: Wake Lock hält den
+Bildschirm nur an, solange das Fenster im Vordergrund ist. Minimiert oder
+von einem Vollbildfenster verdeckt greift es nicht.
 
 ### URL-Parameter
 
