@@ -192,13 +192,28 @@ curl -i -H 'X-Forwarded-Host: cam.DEINE-DOMAIN.tld' \
 Der Header ist hier der entscheidende Teil, nicht Beiwerk. Der Outpost
 sucht die Anwendung über den Host (`lookupApp` in
 `internal/outpost/proxyv2/handlers.go`), und `GetHost` bevorzugt dabei
-`X-Forwarded-Host` vor `Host`. NPMplus setzt den auf die App-Domain.
-Ohne den Header testest du gegen die IP von authentik, findest
-erwartungsgemäß keine Anwendung und bekommst die 404-Seite der
-Weboberfläche — ein Fehlschlag, der wie ein Konfigurationsproblem
-aussieht und keines ist. Erkennbar ist dieser Fall an den Antwort-Headern:
-`Content-Language` und `Vary: Accept-Language, Cookie` kommen von Django,
-nicht vom Outpost.
+`X-Forwarded-Host` vor `Host`. NPMplus setzt den auf die App-Domain;
+ohne den Header testest du gegen die IP von authentik und bekommst
+zwangsläufig einen 404.
+
+**Warum ein 404 und keine sprechende Meldung?** Weil der eingebettete
+Outpost bei unbekanntem Host stillschweigend abgibt —
+`HandleHost()` in `proxyv2.go` liefert schlicht `false`, und die
+Anfrage geht an die Django-Oberfläche, die mit ihrer 404-Seite
+antwortet. Die aussagekräftige Variante (`400` mit
+`"no app for hostname"`) gibt es nur beim eigenständigen Outpost.
+
+Ob der eingebettete Outpost überhaupt läuft, klärt dieser Aufruf — er
+wird vor jeder App-Suche behandelt und ist von der Zuweisung unabhängig:
+
+```bash
+curl -i http://<authentik-IP>:<port>/outpost.goauthentik.io/ping
+```
+
+`204` heißt: Outpost lebt, es fehlt nur die App-Zuweisung. Kommt auch
+hier eine HTML-404, ist gar kein eingebetteter Outpost aktiv
+(`DISABLE_EMBEDDED_OUTPOST`) oder der Port zeigt nicht auf authentiks
+Go-Listener.
 
 `401` ist hier das gesunde Ergebnis. Kommt `404`, kennt der Outpost den
 Host nicht. In authentik müssen dafür **drei** Dinge stehen:
@@ -212,7 +227,17 @@ Host nicht. In authentik müssen dafür **drei** Dinge stehen:
 Schritt 3 passiert **nicht** automatisch und ist der übliche Grund für
 den 404: die Anwendungsliste des eingebetteten Outposts ist anfangs
 leer, er kann die Anfrage also keinem Provider zuordnen. Nach dem
-Zuweisen lädt er selbstständig neu.
+Zuweisen lädt er selbstständig neu. Ob es gewirkt hat, sieht man in der
+Outpost-Liste an der Spalte *Providers* — `-` heißt: keine Zuweisung.
+
+Und noch eine Einstellung am Outpost: **`authentik_host` muss auf die
+HTTPS-Adresse von authentik zeigen.** Der eingebettete Outpost nimmt
+diesen Wert unverändert für die Login-URL im Browser
+(`GetOIDCEndpoint` in `endpoint.go`). Steht dort eine `http://`-Adresse,
+landet der Nutzer auf einer ungesicherten Anmeldeseite — und WebAuthn
+bzw. Passkeys verweigern dort den Dienst, weil sie einen Secure Context
+verlangen. In der Outpost-Liste steht der aktuelle Wert als Hinweis
+unter dem Namen („Logging in via …").
 
 #### Intern ohne Login
 
