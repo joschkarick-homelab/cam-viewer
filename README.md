@@ -135,13 +135,53 @@ Proxy Host für `cam.DEINE-DOMAIN.tld` anlegen:
 | Forward Port | `8091` (bzw. dein `HOST_PORT`) |
 | Websockets Support | **an** |
 | SSL | Zertifikat + Force SSL |
+| **Advanced → Custom Nginx Configuration** | **leer lassen** |
 
-Inhalt von `deploy/npmplus-advanced.conf` unter **Advanced → Custom
-Nginx Configuration** einfügen und `AUTHENTIK_IP` ersetzen.
+> **Nichts in das Advanced-Feld schreiben, was `location /` enthält.**
+> NPMplus erzeugt diesen Block selbst (`proxy_host.conf`, Zeile 147).
+> Ein zweiter davon lässt `nginx -t` mit `duplicate location "/"`
+> scheitern. NPMplus benennt die Config dann in `.err` um, markiert den
+> Host als **Offline** — und weil es den vHost damit gar nicht gibt,
+> landet die Domain auf der NPMplus-Startseite statt bei der App.
+> Dasselbe gilt für `location /outpost.goauthentik.io` und
+> `@goauthentik_proxy_signin`: auch die erzeugt NPMplus selbst.
+
+Die genaue Fehlermeldung steht im `nginx_err`-Feld des Hosts (in der
+Oberfläche am Offline-Status) und in `docker logs npmplus`.
+
+#### authentik
+
+NPMplus hat authentik eingebaut, es braucht **keinen** handgeschriebenen
+Block:
+
+| Feld | Wert |
+|---|---|
+| Auth-Request-Provider | `authentik` |
+| Auth-Request-Upstream | `http://<authentik-IP>:9000` |
+
+Beim Upstream nur `host:port` eintragen, **ohne** den Pfad
+`/outpost.goauthentik.io` — den hängt NPMplus selbst an. Der Port ist
+der des Proxy-Outposts, nicht zwingend der der authentik-Oberfläche.
+
+#### Intern ohne Login
+
+Über eine **Access List** (nicht über Advanced):
+
+| Feld | Wert |
+|---|---|
+| Satisfy Any | **an** |
+| Allow | `192.168.2.0/24` |
+| Deny | `all` |
+
+`satisfy any` steht im generierten `location /` vor den
+`auth_request`-Direktiven — erfüllt ein Client eine der Bedingungen, ist
+er durch. Eine LAN-IP genügt damit, von außen greift authentik.
+
+#### Split-DNS
 
 Internes DNS muss `cam.DEINE-DOMAIN.tld` auf die **LAN-IP von NPMplus**
-zeigen (Split-Horizon). Sonst laufen interne Geräte über den
-Internet-Umweg und bekommen fälschlich den authentik-Login.
+zeigen. Sonst laufen interne Geräte über den Internet-Umweg und bekommen
+fälschlich den Login.
 
 ### 4. HomeKit umziehen (optional)
 
