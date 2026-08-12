@@ -31,10 +31,18 @@ webrtc:
     # Die LAN-IP DIESER VM. Ohne diesen Eintrag findet der Browser im LAN
     # keinen direkten Pfad und fällt unnötig auf MSE zurück.
     # Zieht die VM um, muss der Wert hier mit — und GO2RTC_HOST im Repo.
+    #
+    # NUR host:port. Kein "/tcp"-Suffix, kein Protokoll davor!
+    #
+    # Ein Eintrag erzeugt bereits BEIDE Kandidaten: AddCandidate() in
+    # internal/webrtc/candidates.go wird ohne Netzwerk aufgerufen und legt
+    # daraufhin je einen für tcp und udp an. Ein zusätzliches
+    # "192.168.2.166:8555/tcp" ist deshalb nicht nur überflüssig, es ist
+    # kaputt: net.SplitHostPort() trennt am letzten Doppelpunkt und prüft
+    # den Port nicht, "8555/tcp" landet also wörtlich als Portnummer im
+    # SDP. Chrome verwirft daraufhin die GESAMTE Answer mit
+    # "Invalid port" — alle Kameras schwarz, nicht nur der TCP-Pfad.
     - 192.168.2.166:8555
-    # Zusätzlich TCP-Kandidat, falls ein Client kein UDP darf (manche
-    # Gäste-WLANs, restriktive Firewalls):
-    - 192.168.2.166:8555/tcp
 
 # ── Kameras ────────────────────────────────────────────────────────
 #

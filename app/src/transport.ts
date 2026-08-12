@@ -91,7 +91,7 @@ export async function connectWebRTC(
 
   const answer = await res.json()
   if (!answer?.sdp) throw new Error('keine SDP-Answer erhalten')
-  await pc.setRemoteDescription(answer)
+  await pc.setRemoteDescription({ ...answer, sdp: dropBrokenCandidates(answer.sdp) })
 
   return {
     async framesDecoded() {
@@ -106,6 +106,39 @@ export async function connectWebRTC(
     },
     close: cleanup,
   }
+}
+
+/**
+ * Wirft unbrauchbare `a=candidate:`-Zeilen aus der Answer.
+ *
+ * Der Browser parst das SDP als Ganzes: EINE fehlerhafte Zeile lässt
+ * `setRemoteDescription` scheitern — und damit nicht nur den einen Pfad,
+ * sondern die komplette Verbindung. Alle Kacheln bleiben schwarz.
+ *
+ * go2rtcs eigener Player merkt davon nichts, weil er Trickle-ICE über
+ * WebSocket nutzt: dort kommt jeder Kandidat einzeln, ein schlechter
+ * fällt allein durch. Über den POST-Weg stehen alle in einem Dokument,
+ * also reißt einer alle mit.
+ *
+ * Konkreter Auslöser war ein `/tcp`-Suffix in `webrtc.candidates`, das
+ * go2rtc ungeprüft als Portnummer ins SDP schreibt ("8555/tcp"). Das
+ * gehört in der Config korrigiert — diese Funktion ist kein Ersatz
+ * dafür, sondern die Zusicherung, dass ein Vertipper dort höchstens
+ * einen Netzwerkpfad kostet und nicht das ganze Bild.
+ */
+function dropBrokenCandidates(sdp: string): string {
+  const PREFIX = 'a=candidate:'
+  return sdp
+    .split(/\r?\n/)
+    .filter((line) => {
+      if (!line.startsWith(PREFIX)) return true
+      // <foundation> <component> <transport> <priority> <address> <port> typ …
+      const port = line.slice(PREFIX.length).split(' ')[5]
+      if (/^\d+$/.test(port ?? '')) return true
+      console.warn(`[cam-viewer] ICE-Kandidat verworfen, Port unbrauchbar: ${line}`)
+      return false
+    })
+    .join('\r\n')
 }
 
 /**

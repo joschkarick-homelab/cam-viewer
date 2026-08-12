@@ -8,7 +8,7 @@ Ausgelegt auf **Babycam-Betrieb**: Bildschirm bleibt an, Verbindungs-
 abbrüche sind unübersehbar, und ein eingefrorenes Bild wird niemals als
 Livebild dargestellt.
 
-Bundle: ~4,0 kB JS + 1,2 kB CSS (gzip), kein Framework.
+Bundle: ~4,1 kB JS + 1,2 kB CSS (gzip), kein Framework.
 
 ---
 
@@ -268,6 +268,22 @@ Ein `200` auf `POST /api/webrtc` heißt nur, dass go2rtc eine SDP-Answer
 geliefert hat — über den anschließenden Medienpfad sagt er nichts. Der
 läuft bei WebRTC direkt zu Port 8555 und nie durch nginx. Ein kaputter
 Medienpfad sieht in den Container-Logs deshalb aus wie Erfolg.
+
+**`Invalid port` beim `setRemoteDescription`?** Dann steht in
+`webrtc.candidates` ein Eintrag mit `/tcp`-Suffix. go2rtc reicht den
+ungeprüft als Portnummer ins SDP (`8555/tcp`), der Browser verwirft
+daraufhin die *ganze* Answer, und **alle** Kameras bleiben schwarz.
+
+Dort gehört nur `host:port` hin. Ein einziger Eintrag erzeugt bereits
+Kandidaten für TCP **und** UDP — ein separater TCP-Eintrag ist nicht
+nötig und existiert in dieser Form auch gar nicht.
+
+Warum das in go2rtcs eigenem Player nicht auffällt: der nutzt
+Trickle-ICE über WebSocket, bekommt jeden Kandidaten einzeln, und ein
+unbrauchbarer fällt allein durch. Über den POST-Weg stehen alle in
+einem Dokument — einer reißt alle mit. Die App wirft solche Zeilen
+inzwischen selbst weg, damit ein Vertipper höchstens einen Netzwerkpfad
+kostet.
 
 Der verräterische Fall ist die Meldung `ICE failed` in der Konsole:
 Signalisierung in Ordnung, Medien kommen nicht durch. Fast immer zeigt
