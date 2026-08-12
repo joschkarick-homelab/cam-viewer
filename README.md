@@ -54,11 +54,23 @@ bestehende WSS-Verbindung, also nur Port 443. Die App wählt selbst.
 wget -O /usr/local/bin/go2rtc \
   https://github.com/AlexxIT/go2rtc/releases/latest/download/go2rtc_linux_amd64
 chmod +x /usr/local/bin/go2rtc
+
+# Dienstbenutzer. Fehlt er, bricht der Start mit 217/USER ab.
+id -u go2rtc >/dev/null 2>&1 || \
+  useradd --system --no-create-home --shell /usr/sbin/nologin go2rtc
+
 mkdir -p /etc/go2rtc && cp go2rtc/go2rtc.yaml /etc/go2rtc/
+chown -R go2rtc:go2rtc /etc/go2rtc    # sonst kann der Dienst nicht lesen
 chmod 600 /etc/go2rtc/go2rtc.yaml     # enthält das Cloud-Passwort
+
 cp deploy/go2rtc.service /etc/systemd/system/
 systemctl daemon-reload && systemctl enable --now go2rtc
 ```
+
+Die Config gehört bewusst dem Dienstbenutzer und nicht `root`: go2rtc
+schreibt die HomeKit-Pairings dort hinein. Aus demselben Grund steht
+`/etc/go2rtc` in den `ReadWritePaths` der Unit — `ProtectSystem=strict`
+würde das sonst blockieren.
 
 In `go2rtc.yaml` ausfüllen: `TAPO_CLOUD_PASSWORD` und die LAN-IP der VM
 unter `webrtc.candidates`.
@@ -83,7 +95,13 @@ nicht mehr weißt, in der App unter *Ich → Konto* zurücksetzen. Bei
 geteilten Cams gilt das Passwort des Besitzer-Kontos.
 
 Wer das Klartext-Passwort nicht auf der VM liegen haben will, trägt
-stattdessen dessen Hash ein — `tapo://admin:<SHA256 in Großbuchstaben>@<IP>`.
+stattdessen dessen Hash ein — `tapo://admin:<HASH in Großbuchstaben>@<IP>`.
+Das `admin:` ist Pflicht: ohne Benutzername behandelt go2rtc den Wert
+als Klartext-Passwort und hasht ihn ein zweites Mal, Ergebnis
+`unauthorized`. Ob die Cam MD5 oder SHA256 will, entscheidet sie selbst
+(`encrypt_type`) — also erst mit Klartext verifizieren, dass sie läuft,
+dann umstellen.
+
 Gegenüber der Kamera ist der Hash passwortäquivalent, aber das
 TP-Link-Kontopasswort (und damit der Zugang zu allen TP-Link-Geräten)
 steht dann nicht mehr in der Datei. Details in `go2rtc/go2rtc.yaml`.

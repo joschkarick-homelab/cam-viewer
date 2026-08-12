@@ -3,7 +3,16 @@
 # Installation:
 #   wget -O /usr/local/bin/go2rtc https://github.com/AlexxIT/go2rtc/releases/latest/download/go2rtc_linux_amd64
 #   chmod +x /usr/local/bin/go2rtc
+#
+#   # Dienstbenutzer. Fehlt er, bricht der Start mit 217/USER ab:
+#   #   "Failed to determine user credentials: No such process"
+#   id -u go2rtc >/dev/null 2>&1 || \
+#     useradd --system --no-create-home --shell /usr/sbin/nologin go2rtc
+#
 #   mkdir -p /etc/go2rtc && cp go2rtc/go2rtc.yaml /etc/go2rtc/
+#   chown -R go2rtc:go2rtc /etc/go2rtc
+#   chmod 600 /etc/go2rtc/go2rtc.yaml
+#
 #   cp deploy/go2rtc.service /etc/systemd/system/
 #   systemctl daemon-reload && systemctl enable --now go2rtc
 #
@@ -24,6 +33,10 @@ RestartSec=5s
 # Die Config enthält das Tapo-Cloud-Passwort im Klartext — das ist
 # systembedingt, go2rtc kennt keine Secret-Datei. Wenigstens die
 # Dateirechte eng halten: chmod 600 /etc/go2rtc/go2rtc.yaml
+#
+# Der Benutzer wird NICHT automatisch angelegt — siehe Installation oben.
+# Und die Datei muss ihm gehören: root:root mit 0600 kann der Dienst
+# nicht lesen, dann startet er zwar, findet aber keine Kameras.
 User=go2rtc
 Group=go2rtc
 StateDirectory=go2rtc
@@ -34,7 +47,14 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-ReadWritePaths=/var/lib/go2rtc
+
+# /etc muss schreibbar bleiben, obwohl ProtectSystem=strict sonst alles
+# dichtmacht: go2rtc schreibt die HomeKit-Pairings (client_id,
+# client_public) in die eigene Config zurück. Ohne diese Zeile pairt die
+# Home-App scheinbar erfolgreich — und nach dem nächsten Neustart sind
+# die Cams wieder weg. Das Pairing ist exklusiv, du müsstest sie also
+# jedes Mal erneut aus Scrypted lösen.
+ReadWritePaths=/var/lib/go2rtc /etc/go2rtc
 
 [Install]
 WantedBy=multi-user.target
