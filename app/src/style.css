@@ -190,5 +190,7 @@ button.on {
   overflow-wrap: anywhere;
 }
 
-.tile[data-state="live"] .reason,
-.tile[data-state="connecting"] .reason { display: none; }
+/* Nur im Livebetrieb ausblenden. Während "Verbinde…" ist der Grund des
+   letzten Fehlversuchs die nützlichste Information überhaupt — beim
+   ersten Versuch ist das Feld ohnehin leer. */
+.tile[data-state="live"] .reason { display: none; }
