@@ -112,17 +112,32 @@ export class CamTile {
 
       if (signal.aborted) return
 
-      this.attempt = 0
-      this.setState('live')
-
-      this.dog = new Watchdog(this.video, this.conn, () => {
-        // Kein throw, also auch kein Eintrag in den Dev-Tools. Bei
-        // WebRTC ist das der Normalfall eines kaputten Medienpfads:
-        // die Signalisierung klappt, nur es kommt nie ein Bild.
-        this.note(`keine Frames (${this.transport})`)
-        this.setState('stalled')
-        this.scheduleRetry()
-      })
+      // Die Kachel bleibt auf "Verbinde…", bis wirklich ein Bild
+      // dekodiert wurde. Eine ausgehandelte Verbindung ist noch kein
+      // Livebild — und "Live" ohne Bild ist genau die Lüge, die diese
+      // App nicht erzählen darf.
+      this.dog = new Watchdog(
+        this.video,
+        this.conn,
+        () => {
+          // Kein throw, also auch kein Eintrag in den Dev-Tools. Bei
+          // WebRTC ist das der Normalfall eines kaputten Medienpfads:
+          // die Signalisierung klappt, nur es kommt nie ein Bild.
+          this.note(`keine Frames (${this.transport})`)
+          this.setState('stalled')
+          this.scheduleRetry()
+        },
+        () => {
+          // Erst das erste Bild zählt als geglückter Versuch. Würde der
+          // Zähler schon nach der Aushandlung zurückgesetzt, käme eine
+          // Cam, die zwar aushandelt aber nie ein Bild liefert, niemals
+          // in den Zustand "lost": jeder Reconnect setzte ihn auf 0
+          // zurück, und der Alarm bliebe für immer stumm.
+          this.attempt = 0
+          this.reason.textContent = ''
+          this.setState('live')
+        },
+      )
       this.dog.start()
     } catch (err) {
       if (!signal.aborted) {

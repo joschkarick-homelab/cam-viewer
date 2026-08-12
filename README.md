@@ -8,7 +8,7 @@ Ausgelegt auf **Babycam-Betrieb**: Bildschirm bleibt an, Verbindungs-
 abbrüche sind unübersehbar, und ein eingefrorenes Bild wird niemals als
 Livebild dargestellt.
 
-Bundle: ~3,9 kB JS + 1,2 kB CSS (gzip), kein Framework.
+Bundle: ~4,0 kB JS + 1,2 kB CSS (gzip), kein Framework.
 
 ---
 
@@ -313,6 +313,24 @@ wo es keinen Frame-Zähler gibt, bleibt `currentTime` das Kriterium.
 
 Steht das maßgebliche Signal 3 s still, gilt der Stream als tot, das Bild
 wird ausgegraut und der Reconnect startet (1s, 2s, 4s, 8s, dann alle 15 s).
+
+**Bis zum ersten Bild gelten andere Regeln.** Vor dem ersten Frame
+passiert einiges — go2rtc meldet sich bei der Cam an, ICE handelt einen
+Pfad aus, DTLS gibt sich die Hand —, und das dauert bei WebRTC leicht
+mehrere Sekunden, bei MSE fast nicht. Mit denselben 3 s würden wir eine
+gesunde Verbindung abschießen, bevor sie liefern konnte, und der
+Reconnect finge wieder von vorn an. Deshalb gilt in der Anlaufphase eine
+Geduld von 12 s.
+
+Die Kachel bleibt in dieser Zeit auf **Verbinde…**. Auf „Live" springt
+sie erst, wenn tatsächlich ein Frame dekodiert wurde — eine ausgehandelte
+Verbindung ist noch kein Livebild.
+
+Und daran hängt der Fehlversuchszähler: er wird erst vom ersten Bild
+zurückgesetzt, nicht schon von der geglückten Aushandlung. Sonst käme
+eine Cam, die zwar aushandelt, aber nie ein Bild liefert, niemals in den
+roten Zustand — jeder Reconnect setzte den Zähler auf null, und **der
+Alarm bliebe für immer stumm**.
 
 Der Deckel bei 15 s ist Absicht: unbegrenztes Backoff würde bedeuten,
 dass die Cam nach längerem Ausfall erst Minuten später zurückkommt.
