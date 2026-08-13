@@ -12,7 +12,7 @@
  */
 
 import {
-  connectWebRTC, connectMSE, describeRanges,
+  connectWebRTC, connectMSE, describeRanges, safe,
   type Connection, type Transport,
 } from './transport'
 import { Watchdog, backoffMs } from './watchdog'
@@ -103,6 +103,19 @@ export class CamTile {
     this.reason = document.createElement('div')
     this.reason.className = 'reason'
 
+    // Ein Dekodierfehler beendet die Wiedergabe, ohne dass irgendetwas
+    // wirft: die Kachel bliebe stumm auf "Verbinde…" stehen. Genau das
+    // hat uns die Diagnose gezeigt — video.error 3, sonst nichts.
+    this.video.addEventListener('error', () => {
+      const e = this.video.error
+      // Nur reagieren, solange eine Verbindung steht. Beim Aufräumen
+      // feuert das Element sonst in einen bereits laufenden Neuaufbau.
+      if (!e || this.disposed || !this.conn) return
+      this.note(`Videofehler ${e.code}: ${e.message || 'ohne Meldung'}`)
+      this.setState('stalled')
+      this.scheduleRetry()
+    })
+
     this.el.append(this.video, this.label, this.badge, this.reason)
     this.setState('connecting')
   }
@@ -140,9 +153,13 @@ export class CamTile {
         CONNECT_TIMEOUT_MS,
       )
 
-      // play() kann trotz autoplay abgelehnt werden. Stumm klappt es
-      // praktisch immer; den Ton schaltet der Nutzer separat frei.
-      await this.video.play().catch(() => {})
+      // NICHT awaiten. Nach einem Dekodierfehler kommt diese Promise in
+      // Safari nie zurück — und weil sie außerhalb von
+      // CONNECT_TIMEOUT_MS liegt, blieb connect() dann endgültig
+      // stehen: kein Watchdog, kein Reconnect, kein Alarm. Ob die
+      // Wiedergabe wirklich läuft, beantwortet ohnehin erst der erste
+      // dekodierte Frame.
+      void this.video.play().catch(() => {})
 
       if (signal.aborted) return
 
@@ -221,7 +238,7 @@ export class CamTile {
         readyState: v.readyState,
         networkState: v.networkState,
         currentTime: Number(v.currentTime.toFixed(2)),
-        buffered: describeRanges(v.buffered),
+        buffered: safe(() => describeRanges(v.buffered)),
         size: `${v.videoWidth}x${v.videoHeight}`,
         paused: v.paused,
         muted: v.muted,

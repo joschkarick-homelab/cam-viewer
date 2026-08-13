@@ -9,9 +9,14 @@
  * Playwright steht bewusst NICHT in package.json — es würde sonst bei
  * jedem Docker-Build mitinstalliert, ohne dort je gebraucht zu werden.
  *
- *   cd app && npm run build && npm i -D playwright
- *   (cd app/dist && python3 -m http.server 8099 &)
- *   node ../tools/smoke.mjs
+ *   cd app
+ *   npm run build && npm i -D playwright
+ *   (cd dist && python3 -m http.server 8099 &)
+ *   node smoke.mjs
+ *
+ * Liegt bewusst neben package.json — Node löst ESM-Importe relativ zum
+ * Skript auf, aus einem tools/ am Repo-Wurzelverzeichnis fände es
+ * playwright nicht.
  *
  * Deckt nur Chromium ab. Safari/WebKit geht so nicht — und genau dort
  * saßen die hartnäckigsten Fehler. Der Test ersetzt also keinen Blick
