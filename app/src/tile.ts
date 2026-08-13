@@ -29,6 +29,33 @@ export interface CamConfig {
 /** Ab so vielen Fehlversuchen in Folge gilt die Cam als "lost" und der Alarm geht los. */
 const LOST_AFTER = 3
 
+/**
+ * Deckel für den Verbindungsaufbau.
+ *
+ * Beide Transporte können hängen bleiben, ohne je zu scheitern: MSE
+ * wartet auf die Init-Nachricht von go2rtc, die über einen offenen, aber
+ * stummen WebSocket nie kommt. Ohne diesen Deckel bliebe die Kachel für
+ * immer auf "Verbinde…" stehen — kein Watchdog, kein Reconnect, und vor
+ * allem kein Alarm, weil der Fehlversuchszähler nie hochzählt. Eine
+ * tote Kamera, die niemandem auffällt, ist bei einer Babycam der
+ * schlechteste aller Ausgänge.
+ */
+const CONNECT_TIMEOUT_MS = 15000
+
+/** Lässt eine Promise scheitern, statt sie ewig offen zu lassen. */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`keine Antwort beim Verbindungsaufbau (${ms / 1000}s)`)),
+      ms,
+    )
+    p.then(
+      (v) => { clearTimeout(timer); resolve(v) },
+      (e) => { clearTimeout(timer); reject(e) },
+    )
+  })
+}
+
 export class CamTile {
   readonly el: HTMLElement
   private video: HTMLVideoElement
@@ -102,9 +129,12 @@ export class CamTile {
     const signal = this.abort.signal
 
     try {
-      this.conn = this.transport === 'webrtc'
-        ? await connectWebRTC(this.base, this.src, this.video, signal)
-        : await connectMSE(this.base, this.src, this.video, signal)
+      this.conn = await withTimeout(
+        this.transport === 'webrtc'
+          ? connectWebRTC(this.base, this.src, this.video, signal)
+          : connectMSE(this.base, this.src, this.video, signal),
+        CONNECT_TIMEOUT_MS,
+      )
 
       // play() kann trotz autoplay abgelehnt werden. Stumm klappt es
       // praktisch immer; den Ton schaltet der Nutzer separat frei.
@@ -142,6 +172,10 @@ export class CamTile {
     } catch (err) {
       if (!signal.aborted) {
         this.note(err instanceof Error ? err.message : String(err))
+        // Aufräumen, bevor der nächste Versuch startet: bei einem
+        // Timeout läuft der Verbindungsaufbau sonst im Hintergrund
+        // weiter und hält seinen Socket offen.
+        this.teardown()
         this.scheduleRetry()
       }
     }

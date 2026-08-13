@@ -162,3 +162,14 @@ main().catch((err) => {
   bar.textContent = `Start fehlgeschlagen: ${err.message}`
   bar.classList.add('error')
 })
+
+// Nur damit Chrome und Edge "Installieren" anbieten — der Worker cacht
+// network-first, siehe public/sw.js. Registriert sich ausschließlich im
+// Secure Context, über http://<IP> passiert also nichts. Das ist kein
+// Fehler, sondern der Grund, warum die Installation erst mit NPMplus
+// und TLS auftaucht.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker
+    .register('sw.js')
+    .catch((err) => console.warn('[cam-viewer] Service Worker nicht registriert:', err))
+}

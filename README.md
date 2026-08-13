@@ -8,7 +8,7 @@ Ausgelegt auf **Babycam-Betrieb**: Bildschirm bleibt an, Verbindungs-
 abbrüche sind unübersehbar, und ein eingefrorenes Bild wird niemals als
 Livebild dargestellt.
 
-Bundle: ~4,0 kB JS + 1,2 kB CSS (gzip), kein Framework.
+Bundle: ~4,3 kB JS + 1,2 kB CSS (gzip), kein Framework.
 
 ---
 
@@ -135,13 +135,129 @@ Proxy Host für `cam.DEINE-DOMAIN.tld` anlegen:
 | Forward Port | `8091` (bzw. dein `HOST_PORT`) |
 | Websockets Support | **an** |
 | SSL | Zertifikat + Force SSL |
+| **Advanced → Custom Nginx Configuration** | **leer lassen** |
 
-Inhalt von `deploy/npmplus-advanced.conf` unter **Advanced → Custom
-Nginx Configuration** einfügen und `AUTHENTIK_IP` ersetzen.
+> **Nichts in das Advanced-Feld schreiben, was `location /` enthält.**
+> NPMplus erzeugt diesen Block selbst (`proxy_host.conf`, Zeile 147).
+> Ein zweiter davon lässt `nginx -t` mit `duplicate location "/"`
+> scheitern. NPMplus benennt die Config dann in `.err` um, markiert den
+> Host als **Offline** — und weil es den vHost damit gar nicht gibt,
+> landet die Domain auf der NPMplus-Startseite statt bei der App.
+> Dasselbe gilt für `location /outpost.goauthentik.io` und
+> `@goauthentik_proxy_signin`: auch die erzeugt NPMplus selbst.
+
+Die genaue Fehlermeldung steht im `nginx_err`-Feld des Hosts (in der
+Oberfläche am Offline-Status) und in `docker logs npmplus`.
+
+#### authentik
+
+NPMplus hat authentik eingebaut, es braucht **keinen** handgeschriebenen
+Block. Die Einstellung liegt aber an zwei Stellen, und die wichtigere ist
+nicht im Proxy Host:
+
+**1. In der `compose.yaml` von NPMplus** die Adresse des Outposts setzen
+und den Container neu erzeugen:
+
+```yaml
+- "AUTH_REQUEST_AUTHENTIK_UPSTREAM=http://<authentik-IP>:<port>"
+```
+
+**2. Im Proxy Host** unter *Auth Request* `authentik` wählen.
+
+Das Dropdown allein reicht nicht — ohne die Variable bleibt der Upstream
+leer. Das Format ist streng: **Schema + Host + Port, kein Pfad.**
+`/outpost.goauthentik.io` hängt NPMplus selbst an; steht der Pfad in der
+Variablen, lehnt `envs.sh` sie beim Start mit einer entsprechenden
+Meldung ab.
+
+Der Port ist der, unter dem der Outpost antwortet — nicht zwingend der
+der authentik-Oberfläche. NPMplus merkt in seiner `compose.yaml` an,
+dass der Weg derzeit nur mit dem **eingebetteten** Outpost funktioniert;
+bei einem eigenständigen Proxy-Outpost bleibt der Host zwar Online, der
+Login-Redirect kommt aber nicht.
+
+**HTTP 500 nach dem Aktivieren?** Dann hat der Outpost auf die
+Prüfanfrage etwas geantwortet, mit dem nginx nichts anfangen kann.
+`auth_request` kennt nur 2xx (durchlassen), 401/403 (ablehnen) — alles
+andere wird zu 500. Die Zahl steht in `docker logs npmplus`:
+`auth request unexpected status: …`.
+
+Direkt nachstellen:
+
+```bash
+curl -i -H 'X-Forwarded-Host: cam.DEINE-DOMAIN.tld' \
+  http://<authentik-IP>:<port>/outpost.goauthentik.io/auth/nginx
+```
+
+Der Header ist hier der entscheidende Teil, nicht Beiwerk. Der Outpost
+sucht die Anwendung über den Host (`lookupApp` in
+`internal/outpost/proxyv2/handlers.go`), und `GetHost` bevorzugt dabei
+`X-Forwarded-Host` vor `Host`. NPMplus setzt den auf die App-Domain;
+ohne den Header testest du gegen die IP von authentik und bekommst
+zwangsläufig einen 404.
+
+**Warum ein 404 und keine sprechende Meldung?** Weil der eingebettete
+Outpost bei unbekanntem Host stillschweigend abgibt —
+`HandleHost()` in `proxyv2.go` liefert schlicht `false`, und die
+Anfrage geht an die Django-Oberfläche, die mit ihrer 404-Seite
+antwortet. Die aussagekräftige Variante (`400` mit
+`"no app for hostname"`) gibt es nur beim eigenständigen Outpost.
+
+Ob der eingebettete Outpost überhaupt läuft, klärt dieser Aufruf — er
+wird vor jeder App-Suche behandelt und ist von der Zuweisung unabhängig:
+
+```bash
+curl -i http://<authentik-IP>:<port>/outpost.goauthentik.io/ping
+```
+
+`204` heißt: Outpost lebt, es fehlt nur die App-Zuweisung. Kommt auch
+hier eine HTML-404, ist gar kein eingebetteter Outpost aktiv
+(`DISABLE_EMBEDDED_OUTPOST`) oder der Port zeigt nicht auf authentiks
+Go-Listener.
+
+`401` ist hier das gesunde Ergebnis. Kommt `404`, kennt der Outpost den
+Host nicht. In authentik müssen dafür **drei** Dinge stehen:
+
+1. **Proxy Provider**, Modus *Forward auth (single application)*,
+   External host = `https://cam.DEINE-DOMAIN.tld` (mit Schema, ohne Pfad)
+2. **Application**, die diesen Provider nutzt
+3. **Zuweisung zum Outpost**: *Applications → Outposts →
+   `authentik Embedded Outpost` → Edit → Feld Applications*
+
+Schritt 3 passiert **nicht** automatisch und ist der übliche Grund für
+den 404: die Anwendungsliste des eingebetteten Outposts ist anfangs
+leer, er kann die Anfrage also keinem Provider zuordnen. Nach dem
+Zuweisen lädt er selbstständig neu. Ob es gewirkt hat, sieht man in der
+Outpost-Liste an der Spalte *Providers* — `-` heißt: keine Zuweisung.
+
+Und noch eine Einstellung am Outpost: **`authentik_host` muss auf die
+HTTPS-Adresse von authentik zeigen.** Der eingebettete Outpost nimmt
+diesen Wert unverändert für die Login-URL im Browser
+(`GetOIDCEndpoint` in `endpoint.go`). Steht dort eine `http://`-Adresse,
+landet der Nutzer auf einer ungesicherten Anmeldeseite — und WebAuthn
+bzw. Passkeys verweigern dort den Dienst, weil sie einen Secure Context
+verlangen. In der Outpost-Liste steht der aktuelle Wert als Hinweis
+unter dem Namen („Logging in via …").
+
+#### Intern ohne Login
+
+Über eine **Access List** (nicht über Advanced):
+
+| Feld | Wert |
+|---|---|
+| Satisfy Any | **an** |
+| Allow | `192.168.2.0/24` |
+| Deny | `all` |
+
+`satisfy any` steht im generierten `location /` vor den
+`auth_request`-Direktiven — erfüllt ein Client eine der Bedingungen, ist
+er durch. Eine LAN-IP genügt damit, von außen greift authentik.
+
+#### Split-DNS
 
 Internes DNS muss `cam.DEINE-DOMAIN.tld` auf die **LAN-IP von NPMplus**
-zeigen (Split-Horizon). Sonst laufen interne Geräte über den
-Internet-Umweg und bekommen fälschlich den authentik-Login.
+zeigen. Sonst laufen interne Geräte über den Internet-Umweg und bekommen
+fälschlich den Login.
 
 ### 4. HomeKit umziehen (optional)
 
@@ -269,11 +385,59 @@ geliefert hat — über den anschließenden Medienpfad sagt er nichts. Der
 läuft bei WebRTC direkt zu Port 8555 und nie durch nginx. Ein kaputter
 Medienpfad sieht in den Container-Logs deshalb aus wie Erfolg.
 
+**`Invalid port` beim `setRemoteDescription`?** Dann steht in
+`webrtc.candidates` ein Eintrag mit `/tcp`-Suffix. go2rtc reicht den
+ungeprüft als Portnummer ins SDP (`8555/tcp`), der Browser verwirft
+daraufhin die *ganze* Answer, und **alle** Kameras bleiben schwarz.
+
+Dort gehört nur `host:port` hin. Ein einziger Eintrag erzeugt bereits
+Kandidaten für TCP **und** UDP — ein separater TCP-Eintrag ist nicht
+nötig und existiert in dieser Form auch gar nicht.
+
+Warum das in go2rtcs eigenem Player nicht auffällt: der nutzt
+Trickle-ICE über WebSocket, bekommt jeden Kandidaten einzeln, und ein
+unbrauchbarer fällt allein durch. Über den POST-Weg stehen alle in
+einem Dokument — einer reißt alle mit. Die App wirft solche Zeilen
+inzwischen selbst weg, damit ein Vertipper höchstens einen Netzwerkpfad
+kostet.
+
 Der verräterische Fall ist die Meldung `ICE failed` in der Konsole:
 Signalisierung in Ordnung, Medien kommen nicht durch. Fast immer zeigt
 dann `webrtc.candidates` in `/etc/go2rtc/go2rtc.yaml` auf die falsche
 IP. **Die Datei liegt auf der VM und wird nicht mitdeployt** — eine
 Korrektur im Repo ändert dort nichts.
+
+### Als App installieren
+
+**Voraussetzung ist HTTPS.** Über `http://<IP>:8091` bietet kein Browser
+die Installation an, und Wake Lock bleibt ebenfalls aus — beides braucht
+einen Secure Context. Es geht also erst nach Schritt 3 (NPMplus), unter
+`https://cam.DEINE-DOMAIN.tld`.
+
+| Plattform | Weg |
+|---|---|
+| **Windows** (Edge/Chrome) | Installationssymbol rechts in der Adresszeile, oder ⋯ → *Apps* → *Diese Website als App installieren* |
+| **macOS** (Safari 17+) | *Ablage → Zum Dock hinzufügen* |
+| **macOS** (Chrome/Edge) | Installationssymbol in der Adresszeile |
+| **iOS/iPadOS** | Teilen → *Zum Home-Bildschirm* |
+| **Android** | Menü → *App installieren* |
+
+Chrome und Edge verlangen für das Angebot zusätzlich einen Service
+Worker mit Fetch-Handler; Safari nicht. Deshalb liegt einer in
+`app/public/sw.js` — **network-first**, nicht cache-first. Der übliche
+PWA-Ansatz liefert die App-Shell aus dem Cache, was hier die falsche
+Abwägung wäre: nach einem Deploy liefe alter Code weiter, und genau in
+diesem Code stecken Watchdog, Ausgrauen und Alarm. Ein alter Stand, der
+ein Standbild als Livebild zeigt, wäre schlimmer als eine Sekunde
+Ladezeit. Der Cache greift nur, wenn das Netz gar nicht antwortet.
+
+Als installierte App startet sie ohne Adresszeile in einem eigenen
+Fenster (`display_override: standalone`), auf Mobilgeräten im Vollbild.
+
+**Zum Danebenstellen am Schreibtisch** lohnt eine eigene
+Browser-Profilinstanz oder eben die installierte App: Wake Lock hält den
+Bildschirm nur an, solange das Fenster im Vordergrund ist. Minimiert oder
+von einem Vollbildfenster verdeckt greift es nicht.
 
 ### URL-Parameter
 
@@ -338,6 +502,14 @@ dass die Cam nach längerem Ausfall erst Minuten später zurückkommt.
 ---
 
 ## Bekannte Grenzen
+
+**Safari braucht einen eigenen MSE-Pfad.** Safari ab 17 (macOS wie iOS)
+bringt `ManagedMediaSource` statt `MediaSource` mit. Die will per
+`srcObject` angehängt werden statt per `createObjectURL`, und sie öffnet
+sich erst, wenn das Video-Element wirklich Daten anfordert — also erst
+nach `play()`. Beides steht in `transport.ts`; wer dort aufräumt, sollte
+es wissen, denn der Fehler äußert sich nicht als Fehler, sondern als
+ewiges „Verbinde…" ausschließlich in Safari.
 
 **iOS im Hintergrund.** Wischst du die PWA weg oder sperrst das iPhone,
 suspendiert iOS sie — der Ton ist weg. Wake Lock hält den Bildschirm

@@ -1,8 +1,12 @@
 {
+  "id": "/",
   "name": "Cams",
   "short_name": "Cams",
+  "description": "Livebild der Tapo-Kameras auf allen Geräten.",
   "start_url": ".",
+  "scope": "/",
   "display": "fullscreen",
+  "display_override": ["standalone", "fullscreen"],
   "orientation": "any",
   "background_color": "#0b0d10",
   "theme_color": "#0b0d10",

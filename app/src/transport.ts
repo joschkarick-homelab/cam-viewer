@@ -91,7 +91,7 @@ export async function connectWebRTC(
 
   const answer = await res.json()
   if (!answer?.sdp) throw new Error('keine SDP-Answer erhalten')
-  await pc.setRemoteDescription(answer)
+  await pc.setRemoteDescription({ ...answer, sdp: dropBrokenCandidates(answer.sdp) })
 
   return {
     async framesDecoded() {
@@ -106,6 +106,39 @@ export async function connectWebRTC(
     },
     close: cleanup,
   }
+}
+
+/**
+ * Wirft unbrauchbare `a=candidate:`-Zeilen aus der Answer.
+ *
+ * Der Browser parst das SDP als Ganzes: EINE fehlerhafte Zeile lässt
+ * `setRemoteDescription` scheitern — und damit nicht nur den einen Pfad,
+ * sondern die komplette Verbindung. Alle Kacheln bleiben schwarz.
+ *
+ * go2rtcs eigener Player merkt davon nichts, weil er Trickle-ICE über
+ * WebSocket nutzt: dort kommt jeder Kandidat einzeln, ein schlechter
+ * fällt allein durch. Über den POST-Weg stehen alle in einem Dokument,
+ * also reißt einer alle mit.
+ *
+ * Konkreter Auslöser war ein `/tcp`-Suffix in `webrtc.candidates`, das
+ * go2rtc ungeprüft als Portnummer ins SDP schreibt ("8555/tcp"). Das
+ * gehört in der Config korrigiert — diese Funktion ist kein Ersatz
+ * dafür, sondern die Zusicherung, dass ein Vertipper dort höchstens
+ * einen Netzwerkpfad kostet und nicht das ganze Bild.
+ */
+function dropBrokenCandidates(sdp: string): string {
+  const PREFIX = 'a=candidate:'
+  return sdp
+    .split(/\r?\n/)
+    .filter((line) => {
+      if (!line.startsWith(PREFIX)) return true
+      // <foundation> <component> <transport> <priority> <address> <port> typ …
+      const port = line.slice(PREFIX.length).split(' ')[5]
+      if (/^\d+$/.test(port ?? '')) return true
+      console.warn(`[cam-viewer] ICE-Kandidat verworfen, Port unbrauchbar: ${line}`)
+      return false
+    })
+    .join('\r\n')
 }
 
 /**
@@ -136,6 +169,13 @@ function gatheringComplete(pc: RTCPeerConnection, signal: AbortSignal): Promise<
 // kein MSE. Dort greift als letzte Stufe HLS (siehe main.ts).
 const MediaSourceImpl: typeof MediaSource | undefined =
   (window as any).ManagedMediaSource ?? (window as any).MediaSource
+
+/**
+ * Safari (macOS wie iOS, ab 17) bringt ManagedMediaSource mit, Chrome
+ * nicht. Die beiden verhalten sich beim Anhängen und beim Öffnen
+ * unterschiedlich genug, dass wir das an mehreren Stellen wissen müssen.
+ */
+const managedMediaSource = 'ManagedMediaSource' in window
 
 export const mseSupported = !!MediaSourceImpl
 
@@ -168,15 +208,37 @@ export async function connectMSE(
   ws.binaryType = 'arraybuffer'
 
   const ms = new MediaSourceImpl()
+
   // ManagedMediaSource will explizit "airplay: deny", sonst zeigt iOS
   // einen AirPlay-Button, der den Stream abreißen lässt.
   video.disableRemotePlayback = true
-  video.src = URL.createObjectURL(ms as MediaSource)
+
+  // Die beiden Implementierungen werden UNTERSCHIEDLICH angehängt.
+  // ManagedMediaSource (Safari ab 17, macOS wie iOS) verlangt srcObject;
+  // über createObjectURL feuert dort kein sourceopen, und der
+  // Verbindungsaufbau bleibt für immer stehen. Chrome kennt nur die
+  // klassische MediaSource und braucht die Object-URL.
+  if (managedMediaSource) {
+    video.srcObject = ms as unknown as MediaProvider
+  } else {
+    video.src = URL.createObjectURL(ms as MediaSource)
+    video.srcObject = null
+  }
+
+  // Muss VOR dem Warten auf sourceopen passieren: ManagedMediaSource
+  // öffnet sich erst, wenn das Element tatsächlich Daten anfordert —
+  // also erst nach play(). Ruft man play() wie sonst üblich erst nach
+  // dem Handshake, warten beide Seiten aufeinander.
+  void video.play().catch(() => {})
 
   const cleanup = () => {
     ws.close()
-    URL.revokeObjectURL(video.src)
-    video.removeAttribute('src')
+    if (managedMediaSource) {
+      video.srcObject = null
+    } else {
+      URL.revokeObjectURL(video.src)
+      video.removeAttribute('src')
+    }
     video.load()
   }
   signal.addEventListener('abort', cleanup, { once: true })
@@ -202,22 +264,29 @@ export async function connectMSE(
     const fail = (e: unknown) => reject(e instanceof Error ? e : new Error('WebSocket-Fehler'))
     ws.addEventListener('error', fail, { once: true })
     ws.addEventListener('close', () => reject(new Error('WebSocket geschlossen')), { once: true })
-    ws.addEventListener('open', () => {
+
+    // Die Codecliste geht erst raus, wenn BEIDE Seiten bereit sind: der
+    // Socket offen und die MediaSource geöffnet. Die Reihenfolge ist
+    // nicht vorhersagbar, deshalb das Gatter statt einer Annahme.
+    // Erst danach darf addSourceBuffer() aufgerufen werden.
+    let wsOpen = false
+    let sourceOpen = false
+    const requestCodecs = () => {
+      if (!wsOpen || !sourceOpen) return
       ws.send(JSON.stringify({ type: 'mse', value: supportedCodecs() }))
-    })
+    }
+
+    ws.addEventListener('open', () => { wsOpen = true; requestCodecs() })
+    ms.addEventListener('sourceopen', () => { sourceOpen = true; requestCodecs() }, { once: true })
+
     ws.addEventListener('message', (ev) => {
       if (typeof ev.data === 'string') {
         const msg = JSON.parse(ev.data)
         if (msg.type !== 'mse') return
-        const attach = () => {
-          sb = ms.addSourceBuffer(msg.value)
-          sb.mode = 'segments'
-          sb.addEventListener('updateend', flush)
-          resolve()
-        }
-        ms.readyState === 'open'
-          ? attach()
-          : ms.addEventListener('sourceopen', attach, { once: true })
+        sb = ms.addSourceBuffer(msg.value)
+        sb.mode = 'segments'
+        sb.addEventListener('updateend', flush)
+        resolve()
         return
       }
       queue.push(ev.data as ArrayBuffer)
