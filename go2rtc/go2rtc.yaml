@@ -6,14 +6,20 @@
 #
 # ┌─────────────────────────────────────────────────────────────────┐
 # │ AUSFÜLLEN VOR DEM START:                                        │
-# │  1. TAPO_CLOUD_PASSWORD  → siehe "Welches Passwort?" unten      │
-# │  2. candidates           → die LAN-IP DIESER VM                 │
+# │  1. KAMERAKONTO + PASSWORT  → für die rtsp://-Zeilen unten      │
+# │  2. candidates              → die LAN-IP DIESER VM              │
 # └─────────────────────────────────────────────────────────────────┘
 #
-# UND EINMALIG IN DER TAPO-APP:
+# Das KAMERAKONTO legst du in der Tapo-App an:
+#   Geräteeinstellungen → Erweitert → Kamerakonto
+# Es ist NICHT das TP-Link-Konto-Passwort. Warum die Streams auf rtsp://
+# und nicht auf tapo:// stehen, steht ausführlich bei "streams:" —
+# kurz: über tapo:// bleibt in Safari und auf allen iOS-Geräten das
+# Bild schwarz.
+#
+# Das TP-Link-Konto-Passwort brauchst du nur, falls du die
+# tapo://-Zeilen aktivierst. Dann zusätzlich EINMALIG in der Tapo-App:
 #   Ich → Tapo Lab → Third-Party Compatibility → AN
-# Steht der Schalter aus, scheitert die Anmeldung auch mit dem richtigen
-# Passwort. Das ist der unauffälligste Fehler in diesem ganzen Setup.
 
 api:
   # Nur im LAN lauschen. Der Zugriff von außen läuft über den Reverse
@@ -111,28 +117,56 @@ webrtc:
 # KAMERAKONTO. Alles läuft außer dem Mikrofon-Rückkanal.
 
 streams:
+  # ┌───────────────────────────────────────────────────────────────┐
+  # │ WARUM rtsp:// UND NICHT tapo://                                │
+  # └───────────────────────────────────────────────────────────────┘
+  #
+  # tapo:// liefert keine fmtp-Zeile. go2rtc kennt damit weder SPS noch
+  # PPS und schreibt beim Bau des MP4-Containers einen PLATZHALTER —
+  # pkg/mp4/muxer.go:
+  #
+  #   // some dummy SPS and PPS not a problem for MP4, but problem for HLS :(
+  #   sps = []byte{0x67, 0x42, 0x00, 0x0a, 0xf8, 0x41, 0xa2}
+  #
+  # Das ist Baseline Level 1.0 und ergibt 128x96. Chrome liest die
+  # echten Parameter aus dem Datenstrom nach und spielt trotzdem ab.
+  # Safari — macOS wie iOS — initialisiert seinen Dekoder strikt aus dem
+  # Init-Segment und bricht dann mit MEDIA_ERR_DECODE ab. Bild bleibt
+  # schwarz, auf allen Apple-Geräten, über MSE.
+  #
+  # rtsp:// liefert sprop-parameter-sets, damit den echten SPS und damit
+  # ein korrektes Init-Segment. Kostet den Mikrofon-Rückkanal, den es
+  # ohnehin noch nicht gibt — Tapo kann nur ONVIF Profile S.
+  #
+  # ANMELDUNG: rtsp:// nutzt das KAMERAKONTO aus der Tapo-App
+  # (Geräteeinstellungen → Erweitert → Kamerakonto), NICHT das
+  # TP-Link-Konto-Passwort. Das ist genau andersherum als bei tapo://.
+  #
+  # Wenn der Rückkanal kommt: tapo:// als zusätzlichen Stream-Namen
+  # anlegen und nur dafür verwenden, statt hier umzuschalten.
+
   schlafzimmer:
-    - tapo://TAPO_CLOUD_PASSWORD@192.168.2.52
-    # - rtsp://KAMERAKONTO:PASSWORT@192.168.2.52:554/stream1
+    - rtsp://KAMERAKONTO:PASSWORT@192.168.2.52:554/stream1
+    # - tapo://TAPO_CLOUD_PASSWORD@192.168.2.52   # kein Bild in Safari
 
   kinderzimmer:
-    - tapo://TAPO_CLOUD_PASSWORD@192.168.2.115
-    # - rtsp://KAMERAKONTO:PASSWORT@192.168.2.115:554/stream1
+    - rtsp://KAMERAKONTO:PASSWORT@192.168.2.115:554/stream1
+    # - tapo://TAPO_CLOUD_PASSWORD@192.168.2.115  # kein Bild in Safari
 
   springer:
-    - tapo://TAPO_CLOUD_PASSWORD@192.168.2.35
-    # - rtsp://KAMERAKONTO:PASSWORT@192.168.2.35:554/stream1
+    - rtsp://KAMERAKONTO:PASSWORT@192.168.2.35:554/stream1
+    # - tapo://TAPO_CLOUD_PASSWORD@192.168.2.35   # kein Bild in Safari
 
   # Substreams (VGA) für das Fire Tablet 7. Eigene Stream-Namen, damit
   # das Tablet gezielt darauf zugreifen kann, ohne dass die anderen
   # Geräte Auflösung verlieren.
-  # subtype=1 = VGA, subtype=0 = HD (Default)
+  # Bei RTSP ist das /stream2 statt /stream1 — kein ?subtype=1.
   schlafzimmer_sd:
-    - tapo://TAPO_CLOUD_PASSWORD@192.168.2.52?subtype=1
+    - rtsp://KAMERAKONTO:PASSWORT@192.168.2.52:554/stream2
   kinderzimmer_sd:
-    - tapo://TAPO_CLOUD_PASSWORD@192.168.2.115?subtype=1
+    - rtsp://KAMERAKONTO:PASSWORT@192.168.2.115:554/stream2
   springer_sd:
-    - tapo://TAPO_CLOUD_PASSWORD@192.168.2.35?subtype=1
+    - rtsp://KAMERAKONTO:PASSWORT@192.168.2.35:554/stream2
 
 # ── HomeKit ────────────────────────────────────────────────────────
 #

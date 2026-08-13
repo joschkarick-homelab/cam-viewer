@@ -15,7 +15,7 @@ Bundle: ~6,3 kB JS + 1,3 kB CSS (gzip), kein Framework.
 ## Architektur
 
 ```
-Tapo C100/C200 ──tapo://──► go2rtc  (Scrypted-VM, 192.168.2.166)
+Tapo C100/C200 ──rtsp://──► go2rtc  (Scrypted-VM, 192.168.2.166)
                             │  ├─ HomeKit
                             │  └─ :1984 / :8555
                             │
@@ -72,7 +72,24 @@ schreibt die HomeKit-Pairings dort hinein. Aus demselben Grund steht
 `/etc/go2rtc` in den `ReadWritePaths` der Unit — `ProtectSystem=strict`
 würde das sonst blockieren.
 
-In `go2rtc.yaml` auszufüllen ist nur noch `TAPO_CLOUD_PASSWORD`. Die
+In `go2rtc.yaml` auszufüllen sind **Kamerakonto und Passwort** für die
+`rtsp://`-Zeilen — anzulegen in der Tapo-App unter *Geräteeinstellungen
+→ Erweitert → Kamerakonto*.
+
+> **Warum rtsp:// und nicht tapo://?** `tapo://` liefert go2rtc keine
+> fmtp-Zeile, also weder SPS noch PPS. go2rtc schreibt dann einen
+> Platzhalter in den MP4-Container (`pkg/mp4/muxer.go`: `sps = {0x67,
+> 0x42, 0x00, 0x0a, …}` — Baseline Level 1.0, 128×96). Chrome liest die
+> echten Parameter aus dem Datenstrom nach; **Safari nicht** und bricht
+> mit `MEDIA_ERR_DECODE` ab. Über MSE bleibt damit auf jedem
+> Apple-Gerät das Bild schwarz. `rtsp://` liefert
+> `sprop-parameter-sets` und damit ein korrektes Init-Segment.
+>
+> Der Preis ist der Mikrofon-Rückkanal, den es ohnehin noch nicht gibt.
+> Kommt er, gehört `tapo://` als **zusätzlicher** Stream-Name daneben,
+> nicht als Ersatz.
+
+Die
 LAN-IP der VM unter `webrtc.candidates` steht bereits auf
 `192.168.2.166` — zieht die VM um, gehört sie dort **und** im Secret
 `GO2RTC_HOST` geändert.
