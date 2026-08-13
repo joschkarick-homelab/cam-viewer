@@ -5,7 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0b0d10">
   <title>Cams</title>
-  <link rel="manifest" href="manifest.webmanifest">
+  <!-- crossorigin ist hinter authentik Pflicht: ein Manifest wird sonst
+       OHNE Cookies angefordert, landet damit beim Login-Redirect und
+       scheitert mit "TypeError: Load failed". Ohne Manifest gibt es
+       keine Installation als App. -->
+  <link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials">
   <!-- Vollbild ohne Safari-Leisten, wenn vom Homescreen gestartet -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">

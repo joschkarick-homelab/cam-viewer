@@ -177,6 +177,12 @@ const MediaSourceImpl: typeof MediaSource | undefined =
  */
 const managedMediaSource = 'ManagedMediaSource' in window
 
+/** So viel Vergangenheit bleibt im Puffer stehen. Mehr braucht ein Livestream nicht. */
+const LIVE_WINDOW_S = 5
+
+/** Ab diesem Rückstand aufs Live-Ende wird gesprungen statt hinterherzulaufen. */
+const MAX_LAG_S = 2
+
 export const mseSupported = !!MediaSourceImpl
 
 /** Codecs, die go2rtc anbieten kann — gefiltert auf das, was dieser Browser wirklich kann. */
@@ -260,6 +266,48 @@ export async function connectMSE(
     }
   }
 
+  /**
+   * Abspielposition ans Live-Ende ziehen und Vergangenheit wegschneiden.
+   *
+   * Das Anhängen allein genügt NICHT. Die Segmente tragen die Zeitachse
+   * der Kamera, nicht unsere: der gepufferte Bereich beginnt womöglich
+   * bei Sekunde 48000, während `video.currentTime` auf 0 steht. Die
+   * Abspielposition liegt damit außerhalb des Puffers, und das Element
+   * fängt nie an — Daten kommen an, es passiert trotzdem nichts.
+   *
+   * Chrome bügelt das still aus, Safari nicht. Genau dieser Unterschied
+   * hat uns "Daten fließen, kein Bild" beschert.
+   *
+   * Zweiter Zweck: ohne Wegschneiden wächst der Puffer bis zum
+   * QuotaExceeded. Bei einem Livestream ist alles außer den letzten
+   * Sekunden ohnehin wertlos.
+   */
+  const seekToLive = () => {
+    if (!sb || sb.updating || !sb.buffered.length) return
+
+    const bufStart = sb.buffered.start(0)
+    const bufEnd = sb.buffered.end(sb.buffered.length - 1)
+
+    // Außerhalb des Puffers oder zu weit zurückgefallen? Dann springen.
+    // Kein playbackRate-Nachziehen wie bei go2rtc: ein kurzer Sprung ist
+    // bei einer Babycam ehrlicher als beschleunigte Wiedergabe.
+    if (video.currentTime < bufStart || bufEnd - video.currentTime > MAX_LAG_S) {
+      video.currentTime = Math.max(bufStart, bufEnd - 0.5)
+    }
+
+    const keepFrom = bufEnd - LIVE_WINDOW_S
+    if (keepFrom > bufStart) {
+      try {
+        sb.remove(bufStart, keepFrom)
+        ms.setLiveSeekableRange?.(keepFrom, bufEnd)
+      } catch { /* nächster Durchlauf */ }
+    }
+  }
+
+  // Erst nachschieben, dann aufräumen — remove() setzt `updating`, der
+  // nächste updateend erledigt dann wieder das Anhängen.
+  const onUpdateEnd = () => { flush(); seekToLive() }
+
   await new Promise<void>((resolve, reject) => {
     const fail = (e: unknown) => reject(e instanceof Error ? e : new Error('WebSocket-Fehler'))
     ws.addEventListener('error', fail, { once: true })
@@ -285,7 +333,7 @@ export async function connectMSE(
         if (msg.type !== 'mse') return
         sb = ms.addSourceBuffer(msg.value)
         sb.mode = 'segments'
-        sb.addEventListener('updateend', flush)
+        sb.addEventListener('updateend', onUpdateEnd)
         resolve()
         return
       }

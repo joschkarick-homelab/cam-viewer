@@ -27,11 +27,21 @@ self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()))
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url)
 
-  // Streams und go2rtc-API niemals anfassen. Ein gecachter Stream wäre
-  // ein Standbild — und WebSockets laufen ohnehin nicht über fetch.
-  if (url.pathname.startsWith('/api/')) return
   if (event.request.method !== 'GET') return
   if (url.origin !== self.location.origin) return
+
+  // Bewusst eng: nur die Seite selbst und die gehashten Bundles. Alles
+  // andere geht unangetastet ans Netz — /api/ ohnehin (ein gecachter
+  // Stream wäre ein Standbild), aber auch cams.json und das Manifest.
+  //
+  // Grund: hinter authentik werden manche Anfragen ohne Cookies
+  // gestellt, laufen in den Login-Redirect und scheitern. Fängt der
+  // Worker sie ab, macht er aus einem Randproblem einen Fehler in der
+  // App. Sein einziger Zweck ist, dass Chrome und Edge "Installieren"
+  // anbieten — dafür genügt diese schmale Zuständigkeit.
+  const mine =
+    event.request.mode === 'navigate' || url.pathname.startsWith('/assets/')
+  if (!mine) return
 
   event.respondWith(
     (async () => {
