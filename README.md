@@ -367,7 +367,12 @@ AudioContext entsperren (nötig für den Alarm), Wake Lock anfordern und
 den Ton der ersten Cam freigeben. Browser verlangen dafür eine echte
 Nutzergeste — das lässt sich nicht automatisieren.
 
-Tap auf eine Kachel → Vollbild. Ton läuft immer nur auf einer Cam.
+Tap auf eine Kachel → Vollbild.
+
+Danach steht pro Kamera ein Schalter in der Leiste: **Ton lässt sich für
+beliebig viele Cams gleichzeitig anschalten.** Zwei Kinderzimmer parallel
+zu hören ist bei einer Babycam der eigentliche Zweck; ob drei Streams
+gleichzeitig noch sinnvoll sind, entscheidest du.
 
 ### Kachelzustände
 

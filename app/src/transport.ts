@@ -294,8 +294,15 @@ const managedMediaSource = 'ManagedMediaSource' in window
 /** So viel Vergangenheit bleibt im Puffer stehen. Mehr braucht ein Livestream nicht. */
 const LIVE_WINDOW_S = 5
 
-/** Ab diesem Rückstand aufs Live-Ende wird gesprungen statt hinterherzulaufen. */
+/** Ab diesem Rückstand wird sanft aufgeholt (5 % schneller), nicht gesprungen. */
 const MAX_LAG_S = 2
+
+/**
+ * Ab diesem Rückstand ist etwas grundsätzlich aus dem Tritt — dann hilft
+ * nur noch der Sprung ans Live-Ende. Bewusst großzügig: Springen kostet
+ * einen Dekoder-Neustart und soll die Ausnahme bleiben.
+ */
+const RESYNC_S = 10
 
 export const mseSupported = !!MediaSourceImpl
 
@@ -401,11 +408,23 @@ export async function connectMSE(
     const bufStart = sb.buffered.start(0)
     const bufEnd = sb.buffered.end(sb.buffered.length - 1)
 
-    // Außerhalb des Puffers oder zu weit zurückgefallen? Dann springen.
-    // Kein playbackRate-Nachziehen wie bei go2rtc: ein kurzer Sprung ist
-    // bei einer Babycam ehrlicher als beschleunigte Wiedergabe.
-    if (video.currentTime < bufStart || bufEnd - video.currentTime > MAX_LAG_S) {
+    const t = video.currentTime
+
+    // Gesprungen wird nur, wenn die Position WIRKLICH nicht mehr passt:
+    // außerhalb des Puffers oder weit abgeschlagen.
+    //
+    // Vorher stand hier ein Sprung, sobald der Rückstand MAX_LAG_S
+    // überschritt. Bei einem Livestream ist ein Rückstand von ein bis
+    // zwei Sekunden aber der NORMALZUSTAND — es wurde also bei praktisch
+    // jedem Segment gesprungen, und jeder Sprung kostet in Safari einen
+    // Dekoder-Neustart. Ergebnis: ruckelnde ~1 fps statt eines Bildes.
+    if (t < bufStart || t > bufEnd || bufEnd - t > RESYNC_S) {
       video.currentTime = Math.max(bufStart, bufEnd - 0.5)
+      video.playbackRate = 1
+    } else {
+      // Kleinen Rückstand nicht springen, sondern aufholen. 5 % schneller
+      // fällt niemandem auf, ein Sprung sehr wohl.
+      video.playbackRate = bufEnd - t > MAX_LAG_S ? 1.05 : 1
     }
 
     const keepFrom = bufEnd - LIVE_WINDOW_S

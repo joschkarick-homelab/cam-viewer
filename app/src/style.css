@@ -85,7 +85,9 @@ button.on {
 
 .tile {
   position: relative;
-  aspect-ratio: 16 / 9;
+  /* Standard, bis das erste Bild seine echten Maße meldet — tile.ts
+     setzt dann --ar. Ohne Startwert klappt die Kachel auf 0 zusammen. */
+  aspect-ratio: var(--ar, 16 / 9);
   background: var(--tile);
   border-radius: 10px;
   overflow: hidden;

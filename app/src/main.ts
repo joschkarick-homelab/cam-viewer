@@ -145,16 +145,24 @@ function buildBar(transport: Transport, sd: boolean) {
   bar.append(start, info)
 }
 
-/** Ton immer nur auf EINER Cam — sonst hört man bei drei Streams nur Matsch. */
+/**
+ * Ton pro Kamera einzeln schaltbar.
+ *
+ * Ursprünglich war das eine Auswahl — genau eine Cam mit Ton, weil drei
+ * gleichzeitig nur Matsch ergeben. Für eine Babycam ist das aber zu
+ * eng: zwei Kinderzimmer gleichzeitig zu hören ist der eigentliche
+ * Zweck. Ob drei Streams sinnvoll sind, entscheidet jetzt der Mensch
+ * davor und nicht diese Funktion.
+ */
 function soundPicker(): HTMLElement {
   const wrap = document.createElement('div')
   wrap.className = 'picker'
-  tiles.forEach((t, i) => {
+  tiles.forEach((t) => {
     const b = button(t.el.querySelector('.label')!.textContent!, () => {
-      tiles.forEach((o, j) => o.setMuted(i !== j))
-      wrap.querySelectorAll('button').forEach((x, j) => x.classList.toggle('on', i === j))
+      t.setMuted(!t.muted)
+      b.classList.toggle('on', !t.muted)
     })
-    if (i === 0) b.classList.add('on')
+    b.classList.toggle('on', !t.muted)
     wrap.append(b)
   })
   return wrap
