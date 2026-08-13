@@ -8,7 +8,7 @@ Ausgelegt auf **Babycam-Betrieb**: Bildschirm bleibt an, Verbindungs-
 abbrüche sind unübersehbar, und ein eingefrorenes Bild wird niemals als
 Livebild dargestellt.
 
-Bundle: ~4,3 kB JS + 1,2 kB CSS (gzip), kein Framework.
+Bundle: ~4,4 kB JS + 1,2 kB CSS (gzip), kein Framework.
 
 ---
 
