@@ -15,10 +15,26 @@
 
 export type Transport = 'webrtc' | 'mse'
 
+/** Gepufferte Bereiche lesbar machen — "48123.4–48128.9" statt eines TimeRanges-Objekts. */
+export function describeRanges(r: TimeRanges): string {
+  if (!r.length) return 'leer'
+  const parts: string[] = []
+  for (let i = 0; i < r.length; i++) parts.push(`${r.start(i).toFixed(1)}–${r.end(i).toFixed(1)}`)
+  return parts.join(', ')
+}
+
 /** Was ein Transport nach außen anbietet — bewusst minimal. */
 export interface Connection {
   /** Für den Watchdog: dekodierte Frames seit Verbindungsaufbau, oder null wenn unbekannt. */
   framesDecoded(): Promise<number | null>
+  /**
+   * Innenansicht für die Diagnose (`?debug=1`).
+   *
+   * Alles, was man bei einem stummen Fehler wissen will, ohne raten zu
+   * müssen: Zustände, Zähler, ausgehandelte Codecs. Wird nur auf
+   * Anforderung erhoben, kostet im Normalbetrieb also nichts.
+   */
+  diagnostics(): Promise<Record<string, unknown>>
   close(): void
 }
 
@@ -104,6 +120,48 @@ export async function connectWebRTC(
       })
       return frames
     },
+
+    async diagnostics() {
+      const out: Record<string, unknown> = {
+        transport: 'webrtc',
+        iceConnectionState: pc.iceConnectionState,
+        iceGatheringState: pc.iceGatheringState,
+        connectionState: pc.connectionState,
+        signalingState: pc.signalingState,
+      }
+      try {
+        const stats = await pc.getStats()
+        stats.forEach((r: any) => {
+          if (r.type === 'inbound-rtp') {
+            out[`inbound-${r.kind}`] = {
+              bytesReceived: r.bytesReceived,
+              packetsReceived: r.packetsReceived,
+              packetsLost: r.packetsLost,
+              framesDecoded: r.framesDecoded,
+              frameWidth: r.frameWidth,
+              frameHeight: r.frameHeight,
+            }
+          }
+          // Verrät, WELCHER Kandidat gewonnen hat — bei Problemen mit
+          // webrtc.candidates die entscheidende Zeile.
+          if (r.type === 'candidate-pair' && r.state === 'succeeded') {
+            out.candidatePair = {
+              localCandidateId: r.localCandidateId,
+              remoteCandidateId: r.remoteCandidateId,
+              currentRoundTripTime: r.currentRoundTripTime,
+            }
+          }
+          if (r.type === 'remote-candidate') {
+            out[`remoteCandidate-${r.id}`] =
+              `${r.protocol} ${r.address}:${r.port} ${r.candidateType}`
+          }
+        })
+      } catch (err) {
+        out.statsError = String(err)
+      }
+      return out
+    },
+
     close: cleanup,
   }
 }
@@ -234,10 +292,18 @@ export async function connectMSE(
   let sb: SourceBuffer | null = null
   const queue: ArrayBuffer[] = []
 
+  // Nur für die Diagnose. "Bytes fließen, aber buffered ist leer" war
+  // heute der Befund, der die Ursache eingegrenzt hat — den will man
+  // nicht jedes Mal aus dem Netzwerk-Tab ablesen müssen.
+  let bytesReceived = 0
+  let chunksAppended = 0
+  let negotiatedCodecs = ''
+
   const flush = () => {
     if (!sb || sb.updating || queue.length === 0) return
     try {
       sb.appendBuffer(queue.shift()!)
+      chunksAppended++
     } catch {
       // QuotaExceeded: der Puffer ist voll. Wir schneiden alles ab, was
       // hinter der aktuellen Position liegt — bei einem Livestream ist
@@ -341,12 +407,14 @@ export async function connectMSE(
           if (ms.readyState !== 'open') {
             throw new Error(`MediaSource ist "${ms.readyState}" statt "open"`)
           }
+          negotiatedCodecs = msg.value
           sb = ms.addSourceBuffer(msg.value)
           sb.mode = 'segments'
           sb.addEventListener('updateend', onUpdateEnd)
           done()
           return
         }
+        bytesReceived += (ev.data as ArrayBuffer).byteLength
         queue.push(ev.data as ArrayBuffer)
         flush()
       } catch (err) {
@@ -382,6 +450,23 @@ export async function connectMSE(
     // video.currentTime zurück, was für diesen Pfad ausreicht.
     async framesDecoded() {
       return null
+    },
+
+    async diagnostics() {
+      return {
+        transport: 'mse',
+        managedMediaSource,
+        wsReadyState: ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][ws.readyState] ?? ws.readyState,
+        mediaSourceReadyState: ms.readyState,
+        negotiatedCodecs,
+        offeredCodecs: supportedCodecs(),
+        bytesReceived,
+        chunksAppended,
+        queued: queue.length,
+        sourceBuffer: sb
+          ? { updating: sb.updating, mode: sb.mode, ranges: describeRanges(sb.buffered) }
+          : null,
+      }
     },
     close: cleanup,
   }

@@ -8,7 +8,7 @@ Ausgelegt auf **Babycam-Betrieb**: Bildschirm bleibt an, Verbindungs-
 abbrüche sind unübersehbar, und ein eingefrorenes Bild wird niemals als
 Livebild dargestellt.
 
-Bundle: ~4,5 kB JS + 1,2 kB CSS (gzip), kein Framework.
+Bundle: ~5,9 kB JS + 1,3 kB CSS (gzip), kein Framework.
 
 ---
 
@@ -445,8 +445,40 @@ von einem Vollbildfenster verdeckt greift es nicht.
 |---|---|
 | `?sd=1` / `?sd=0` | VGA-Substream erzwingen bzw. abschalten |
 | `?transport=webrtc\|mse` | Transport erzwingen |
+| `?debug=1` / `?debug=0` | Diagnoseanzeige ein/aus |
 
-Beides wird in `localStorage` gemerkt.
+Alles wird in `localStorage` gemerkt.
+
+### Diagnose
+
+`?debug=1` blendet unten eine Anzeige ein, die sich sekündlich
+aktualisiert, und legt einen Knopf **Diagnose kopieren** in die Leiste.
+Ein Tap legt alles als Text in die Zwischenablage:
+
+- **Umgebung** — Build-Zeitstempel, User-Agent, Secure Context, ob
+  `ManagedMediaSource` existiert, die Eingangswerte beider Heuristiken
+  (`deviceMemory`, `hardwareConcurrency`) und der Inhalt von
+  `localStorage`
+- **Je Kachel** — Zustand, Fehlversuche, letzter Grund, benutzter
+  Stream-Name, dazu `readyState`, `buffered`, `currentTime` und
+  Bildgröße des Video-Elements
+- **Je Transport** — bei MSE ausgehandelte und angebotene Codecs,
+  empfangene Bytes, angehängte Blöcke, Zustand der MediaSource; bei
+  WebRTC ICE-Zustände, empfangene Pakete, dekodierte Frames und der
+  gewählte Kandidat
+- **Verlauf** — jeder Zustandswechsel und Fehlversuch mit Zeitstempel,
+  wodurch Muster wie „verbindet alle 15 s neu" direkt ablesbar sind
+
+Der Build-Zeitstempel beantwortet dabei die Frage, die beim Einrichten
+am häufigsten aufhält: **sieht dieses Gerät überhaupt den frisch
+deployten Stand?**
+
+Gedacht ist das für Handy und Fire Tablet, wo es keine Entwicklerkonsole
+gibt. Ohne Secure Context — also über `http://<IP>:8091` — gibt es keine
+Zwischenablage; dann zeigt der Knopf den Text zum Markieren an.
+
+Die Anzeige wird erst bei Bedarf nachgeladen (eigener Chunk, ~1 kB) und
+kostet im Normalbetrieb nichts.
 
 `cams.json` liegt neben `index.html` und wird zur Laufzeit geladen —
 Kameras umbenennen oder ergänzen braucht **keinen neuen Build**.
