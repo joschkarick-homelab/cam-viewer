@@ -352,9 +352,34 @@ Und: **ein geändertes Secret wirkt erst beim nächsten Deploy.**
 laufende Container kennt nur den Wert von damals. Nach dem Korrigieren
 also *Actions → Deploy to Homelab → Run workflow*.
 
-Außerdem: das GHCR-Package nach dem ersten Build auf **privat** stellen
-und der LXC Lesezugriff geben (Deploy-Token oder `docker login ghcr.io`),
-falls sie nicht ohnehin eingeloggt ist.
+### Privates GHCR-Package
+
+Das Package sollte nach dem ersten Build auf **privat** stehen — die
+Kamerabilder sind zwar nicht im Image, der Aufbau des Heimnetzes aber
+schon (`nginx.conf`, `cams.json`). Ein privates Package heißt allerdings:
+`docker compose pull` in der LXC scheitert mit
+
+```
+error from registry: denied
+```
+
+— eine Meldung, die nach einem falschen Tag aussieht und in Wahrheit
+„nicht eingeloggt" bedeutet.
+
+Der Deploy-Workflow löst das selbst: er reicht das ohnehin vorhandene
+`GITHUB_TOKEN` über stdin per SSH an `docker login ghcr.io` durch und
+meldet sich danach wieder ab. Das Token gilt nur für die Dauer des Laufs
+und liegt weder in der Prozessliste noch dauerhaft in
+`~/.docker/config.json`. Dafür braucht der Job `permissions: packages:
+read` — ohne das darf `GITHUB_TOKEN` keine Packages lesen, auch nicht die
+des eigenen Repos.
+
+Wer stattdessen von Hand in der LXC pullen will, meldet sich einmalig mit
+einem PAT (Scope `read:packages`) an:
+
+```bash
+echo '<PAT>' | docker login ghcr.io -u <github-user> --password-stdin
+```
 
 ---
 
