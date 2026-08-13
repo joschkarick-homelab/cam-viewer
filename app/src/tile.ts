@@ -103,6 +103,17 @@ export class CamTile {
     this.reason = document.createElement('div')
     this.reason.className = 'reason'
 
+    // Die Kachel übernimmt das Seitenverhältnis des tatsächlichen
+    // Bildes. Ohne das steckt ein 4:3-Substream (640x480) in einer
+    // 16:9-Kachel und bekommt schwarze Balken links und rechts.
+    // Als CSS-Variable, damit die Vollbildregel weiter gewinnt.
+    const adoptAspect = () => {
+      const { videoWidth: w, videoHeight: h } = this.video
+      if (w > 0 && h > 0) this.el.style.setProperty('--ar', `${w} / ${h}`)
+    }
+    this.video.addEventListener('loadedmetadata', adoptAspect)
+    this.video.addEventListener('resize', adoptAspect)
+
     // Ein Dekodierfehler beendet die Wiedergabe, ohne dass irgendetwas
     // wirft: die Kachel bliebe stumm auf "Verbinde…" stehen. Genau das
     // hat uns die Diagnose gezeigt — video.error 3, sonst nichts.

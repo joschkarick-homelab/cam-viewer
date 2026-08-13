@@ -89,8 +89,7 @@ In `go2rtc.yaml` auszufüllen sind **Kamerakonto und Passwort** für die
 > Kommt er, gehört `tapo://` als **zusätzlicher** Stream-Name daneben,
 > nicht als Ersatz.
 
-Die
-LAN-IP der VM unter `webrtc.candidates` steht bereits auf
+Die LAN-IP der VM unter `webrtc.candidates` steht bereits auf
 `192.168.2.166` — zieht die VM um, gehört sie dort **und** im Secret
 `GO2RTC_HOST` geändert.
 
@@ -128,10 +127,9 @@ steht dann nicht mehr in der Datei. Details in `go2rtc/go2rtc.yaml`.
 **Erst weitermachen, wenn `http://<VM-IP>:1984` alle drei Cams mit Bild
 und Ton zeigt.** Das trennt Kamera- von App-Problemen.
 
-Klappt eine Cam partout nicht — Symptom `Unable to find token in
-response` deutet auf eine Firmware, die das Protokoll nicht spricht —,
-die vorbereitete `rtsp://`-Zeile aktivieren. Dann läuft alles außer dem
-Mikrofon-Rückkanal.
+Der Abschnitt „Welches Passwort?" oben betrifft nur die
+auskommentierten `tapo://`-Zeilen. Für den Normalbetrieb über `rtsp://`
+brauchst du ausschließlich das Kamerakonto.
 
 ### 2. App deployen
 
@@ -367,7 +365,12 @@ AudioContext entsperren (nötig für den Alarm), Wake Lock anfordern und
 den Ton der ersten Cam freigeben. Browser verlangen dafür eine echte
 Nutzergeste — das lässt sich nicht automatisieren.
 
-Tap auf eine Kachel → Vollbild. Ton läuft immer nur auf einer Cam.
+Tap auf eine Kachel → Vollbild.
+
+Danach steht pro Kamera ein Schalter in der Leiste: **Ton lässt sich für
+beliebig viele Cams gleichzeitig anschalten.** Zwei Kinderzimmer parallel
+zu hören ist bei einer Babycam der eigentliche Zweck; ob drei Streams
+gleichzeitig noch sinnvoll sind, entscheidest du.
 
 ### Kachelzustände
 
