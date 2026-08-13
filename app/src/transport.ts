@@ -219,24 +219,6 @@ export async function connectMSE(
   // einen AirPlay-Button, der den Stream abreißen lässt.
   video.disableRemotePlayback = true
 
-  // Die beiden Implementierungen werden UNTERSCHIEDLICH angehängt.
-  // ManagedMediaSource (Safari ab 17, macOS wie iOS) verlangt srcObject;
-  // über createObjectURL feuert dort kein sourceopen, und der
-  // Verbindungsaufbau bleibt für immer stehen. Chrome kennt nur die
-  // klassische MediaSource und braucht die Object-URL.
-  if (managedMediaSource) {
-    video.srcObject = ms as unknown as MediaProvider
-  } else {
-    video.src = URL.createObjectURL(ms as MediaSource)
-    video.srcObject = null
-  }
-
-  // Muss VOR dem Warten auf sourceopen passieren: ManagedMediaSource
-  // öffnet sich erst, wenn das Element tatsächlich Daten anfordert —
-  // also erst nach play(). Ruft man play() wie sonst üblich erst nach
-  // dem Handshake, warten beide Seiten aufeinander.
-  void video.play().catch(() => {})
-
   const cleanup = () => {
     ws.close()
     if (managedMediaSource) {
@@ -309,14 +291,35 @@ export async function connectMSE(
   const onUpdateEnd = () => { flush(); seekToLive() }
 
   await new Promise<void>((resolve, reject) => {
-    const fail = (e: unknown) => reject(e instanceof Error ? e : new Error('WebSocket-Fehler'))
-    ws.addEventListener('error', fail, { once: true })
-    ws.addEventListener('close', () => reject(new Error('WebSocket geschlossen')), { once: true })
+    let settled = false
+
+    const done = () => { settled = true; resolve() }
+
+    /**
+     * Jeder Fehler landet hier — auch die aus den Event-Handlern.
+     *
+     * Ohne das fällt z.B. ein InvalidStateError aus dem
+     * message-Handler als "uncaught" daneben: die Promise bliebe offen,
+     * der Aufbau liefe stumm in den Timeout, und in der Konsole stünde
+     * ein Fehler ohne erkennbaren Bezug zur Kachel.
+     */
+    const fail = (e: unknown) => {
+      const err = e instanceof Error ? e : new Error(String(e))
+      if (settled) {
+        console.warn(`[cam-viewer/${src}] MSE-Fehler nach dem Aufbau:`, err)
+        return
+      }
+      settled = true
+      reject(err)
+    }
+
+    ws.addEventListener('error', () => fail(new Error('WebSocket-Fehler')), { once: true })
+    ws.addEventListener('close', () => fail(new Error('WebSocket geschlossen')), { once: true })
+    signal.addEventListener('abort', () => fail(new Error('abgebrochen')), { once: true })
 
     // Die Codecliste geht erst raus, wenn BEIDE Seiten bereit sind: der
     // Socket offen und die MediaSource geöffnet. Die Reihenfolge ist
     // nicht vorhersagbar, deshalb das Gatter statt einer Annahme.
-    // Erst danach darf addSourceBuffer() aufgerufen werden.
     let wsOpen = false
     let sourceOpen = false
     const requestCodecs = () => {
@@ -325,22 +328,53 @@ export async function connectMSE(
     }
 
     ws.addEventListener('open', () => { wsOpen = true; requestCodecs() })
-    ms.addEventListener('sourceopen', () => { sourceOpen = true; requestCodecs() }, { once: true })
 
     ws.addEventListener('message', (ev) => {
-      if (typeof ev.data === 'string') {
-        const msg = JSON.parse(ev.data)
-        if (msg.type !== 'mse') return
-        sb = ms.addSourceBuffer(msg.value)
-        sb.mode = 'segments'
-        sb.addEventListener('updateend', onUpdateEnd)
-        resolve()
-        return
+      try {
+        if (typeof ev.data === 'string') {
+          const msg = JSON.parse(ev.data)
+          if (msg.type !== 'mse') return
+          // addSourceBuffer() wirft InvalidStateError, wenn die
+          // MediaSource nicht (mehr) offen ist. Bei ManagedMediaSource
+          // ist das keine Theorie: sie schließt wieder, sobald das
+          // Element gerade keine Daten braucht.
+          if (ms.readyState !== 'open') {
+            throw new Error(`MediaSource ist "${ms.readyState}" statt "open"`)
+          }
+          sb = ms.addSourceBuffer(msg.value)
+          sb.mode = 'segments'
+          sb.addEventListener('updateend', onUpdateEnd)
+          done()
+          return
+        }
+        queue.push(ev.data as ArrayBuffer)
+        flush()
+      } catch (err) {
+        fail(err)
       }
-      queue.push(ev.data as ArrayBuffer)
-      flush()
     })
-    signal.addEventListener('abort', () => reject(new Error('abgebrochen')), { once: true })
+
+    // Reihenfolge ist hier entscheidend: erst den sourceopen-Listener,
+    // DANN anhängen und abspielen. Bei ManagedMediaSource kann das
+    // Ereignis unmittelbar nach dem Anhängen feuern — registrierten wir
+    // den Listener erst danach, verpassten wir es und warteten ewig.
+    const onSourceOpen = () => { sourceOpen = true; requestCodecs() }
+    if (ms.readyState === 'open') onSourceOpen()
+    else ms.addEventListener('sourceopen', onSourceOpen, { once: true })
+
+    // ManagedMediaSource (Safari ab 17) verlangt srcObject; über
+    // createObjectURL feuert dort kein sourceopen. Chrome kennt nur die
+    // klassische MediaSource und braucht die Object-URL.
+    if (managedMediaSource) {
+      video.srcObject = ms as unknown as MediaProvider
+    } else {
+      video.src = URL.createObjectURL(ms as MediaSource)
+      video.srcObject = null
+    }
+
+    // Muss vor dem Warten auf sourceopen passieren: ManagedMediaSource
+    // öffnet sich erst, wenn das Element tatsächlich Daten anfordert.
+    void video.play().catch(() => {})
   })
 
   return {
