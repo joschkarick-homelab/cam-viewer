@@ -16,6 +16,47 @@
 export type Transport = 'webrtc' | 'mse'
 
 /**
+ * Liest Profil, Kompatibilität und Level aus der `avcC`-Box eines
+ * fMP4-Init-Segments — also aus dem, was der Bitstrom wirklich sagt.
+ *
+ * Aufbau: `[4 Byte Größe]['avcC'][Version][Profil][Kompat][Level]…`
+ */
+function avcProfileFromInit(buf: ArrayBuffer): string | null {
+  const b = new Uint8Array(buf)
+  for (let i = 0; i + 8 < b.length; i++) {
+    // 'avcC'
+    if (b[i] === 0x61 && b[i + 1] === 0x76 && b[i + 2] === 0x63 && b[i + 3] === 0x43) {
+      return [b[i + 5], b[i + 6], b[i + 7]]
+        .map((x) => x.toString(16).padStart(2, '0').toUpperCase())
+        .join('')
+    }
+  }
+  return null
+}
+
+/**
+ * Korrigiert den von go2rtc gemeldeten H.264-Codec-String.
+ *
+ * go2rtc leitet ihn aus der fmtp-Zeile der Quelle ab — die `tapo://`
+ * aber gar nicht liefert (`pkg/tapo/producer.go` legt den Codec ohne
+ * FmtpLine an). `GetProfileLevelID("")` fällt dann auf fest verdrahtete
+ * Werte zurück und meldet für JEDE Tapo-Cam `avc1.640029`, also High
+ * 4.1 — unabhängig davon, was die Kamera wirklich kodiert.
+ *
+ * Safari prüft den deklarierten String gegen die SPS im Bitstrom und
+ * lehnt bei Abweichung mit MEDIA_ERR_DECODE ab; Chrome sieht darüber
+ * hinweg. Genau das war die Ursache für "läuft in Chrome, nicht in
+ * Safari".
+ *
+ * Der Audio-Teil bleibt unangetastet, falls go2rtc einen mitschickt.
+ */
+function correctH264Codec(mime: string, init: ArrayBuffer): string {
+  const real = avcProfileFromInit(init)
+  if (!real) return mime
+  return mime.replace(/avc1\.[0-9A-Fa-f]{6}/, `avc1.${real}`)
+}
+
+/**
  * Wert für die Diagnose holen, ohne dass ein Fehler alles mitreißt.
  *
  * Genau die Eigenschaften, die man bei einem Problem lesen will, sind
@@ -320,6 +361,8 @@ export async function connectMSE(
   let bytesReceived = 0
   let chunksAppended = 0
   let negotiatedCodecs = ''
+  // Was wir daraus gemacht haben — die Diagnose soll beides zeigen.
+  let effectiveCodecs = ''
 
   const flush = () => {
     if (!sb || sb.updating || queue.length === 0) return
@@ -429,15 +472,40 @@ export async function connectMSE(
           if (ms.readyState !== 'open') {
             throw new Error(`MediaSource ist "${ms.readyState}" statt "open"`)
           }
+          // Nur merken. Der SourceBuffer entsteht erst mit dem ersten
+          // Binärblock — das ist das Init-Segment, und nur dort steht,
+          // welches H.264-Profil wirklich anliegt.
           negotiatedCodecs = msg.value
-          sb = ms.addSourceBuffer(msg.value)
+          return
+        }
+
+        const chunk = ev.data as ArrayBuffer
+        bytesReceived += chunk.byteLength
+
+        if (!sb) {
+          if (!negotiatedCodecs) throw new Error('Binärdaten vor der Codec-Aushandlung')
+          if (ms.readyState !== 'open') {
+            throw new Error(`MediaSource ist "${ms.readyState}" statt "open"`)
+          }
+          effectiveCodecs = correctH264Codec(negotiatedCodecs, chunk)
+          try {
+            sb = ms.addSourceBuffer(effectiveCodecs)
+          } catch (err) {
+            // Lieber go2rtcs Angabe versuchen als gar nichts — dann
+            // scheitert es wie bisher, aber nicht schlimmer.
+            console.warn(
+              `[cam-viewer/${src}] "${effectiveCodecs}" abgelehnt, versuche "${negotiatedCodecs}":`,
+              err,
+            )
+            effectiveCodecs = negotiatedCodecs
+            sb = ms.addSourceBuffer(negotiatedCodecs)
+          }
           sb.mode = 'segments'
           sb.addEventListener('updateend', onUpdateEnd)
           done()
-          return
         }
-        bytesReceived += (ev.data as ArrayBuffer).byteLength
-        queue.push(ev.data as ArrayBuffer)
+
+        queue.push(chunk)
         flush()
       } catch (err) {
         fail(err)
@@ -487,6 +555,7 @@ export async function connectMSE(
           ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][ws.readyState] ?? ws.readyState),
         mediaSourceReadyState: safe(() => ms.readyState),
         negotiatedCodecs,
+        effectiveCodecs,
         offeredCodecs: safe(() => supportedCodecs()),
         bytesReceived,
         chunksAppended,
