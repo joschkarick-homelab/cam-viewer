@@ -13,6 +13,8 @@
  * Die Auswahl trifft nicht der Nutzer, sondern `pickTransport()` in main.ts.
  */
 
+import { LIVE_WINDOW_S, liveRate } from './pace'
+
 export type Transport = 'webrtc' | 'mse'
 
 /**
@@ -291,18 +293,16 @@ const MediaSourceImpl: typeof MediaSource | undefined =
  */
 const managedMediaSource = 'ManagedMediaSource' in window
 
-/** So viel Vergangenheit bleibt im Puffer stehen. Mehr braucht ein Livestream nicht. */
-const LIVE_WINDOW_S = 5
-
-/** Ab diesem Rückstand wird sanft aufgeholt (5 % schneller), nicht gesprungen. */
-const MAX_LAG_S = 2
-
 /**
- * Ab diesem Rückstand ist etwas grundsätzlich aus dem Tritt — dann hilft
- * nur noch der Sprung ans Live-Ende. Bewusst großzügig: Springen kostet
- * einen Dekoder-Neustart und soll die Ausnahme bleiben.
+ * Deckel für die Warteschlange, in Bytes.
+ *
+ * Sie füllt sich nur, solange der SourceBuffer beschäftigt ist. Nimmt er
+ * dauerhaft nichts mehr an, wüchse sie ohne Grenze — auf einem iPhone
+ * beendet Safari den Tab dann irgendwann wegen Speicherdrucks, und zwar
+ * ohne jede Meldung. Ein verworfenes Segment kostet kurz Artefakte, ein
+ * beendeter Tab die ganze Nacht.
  */
-const RESYNC_S = 10
+const MAX_QUEUE_BYTES = 4 * 1024 * 1024
 
 export const mseSupported = !!MediaSourceImpl
 
@@ -367,14 +367,35 @@ export async function connectMSE(
   // nicht jedes Mal aus dem Netzwerk-Tab ablesen müssen.
   let bytesReceived = 0
   let chunksAppended = 0
+  let chunksDropped = 0
+  let queuedBytes = 0
+  let lastGap: number | null = null
   let negotiatedCodecs = ''
   // Was wir daraus gemacht haben — die Diagnose soll beides zeigen.
   let effectiveCodecs = ''
 
+  /**
+   * Segment einreihen und dabei den Deckel einhalten.
+   *
+   * Verworfen wird von vorne: das älteste Segment ist das, dessen
+   * Anzeigezeitpunkt am weitesten zurückliegt — bei einem Livebild also
+   * das mit Abstand wertloseste.
+   */
+  const enqueue = (chunk: ArrayBuffer) => {
+    queue.push(chunk)
+    queuedBytes += chunk.byteLength
+    while (queuedBytes > MAX_QUEUE_BYTES && queue.length > 1) {
+      queuedBytes -= queue.shift()!.byteLength
+      chunksDropped++
+    }
+  }
+
   const flush = () => {
     if (!sb || sb.updating || queue.length === 0) return
+    const chunk = queue.shift()!
+    queuedBytes -= chunk.byteLength
     try {
-      sb.appendBuffer(queue.shift()!)
+      sb.appendBuffer(chunk)
       chunksAppended++
     } catch {
       // QuotaExceeded: der Puffer ist voll. Wir schneiden alles ab, was
@@ -387,58 +408,64 @@ export async function connectMSE(
   }
 
   /**
-   * Abspielposition ans Live-Ende ziehen und Vergangenheit wegschneiden.
+   * Vergangenheit wegschneiden, Position im Fenster halten, Tempo regeln.
    *
-   * Das Anhängen allein genügt NICHT. Die Segmente tragen die Zeitachse
-   * der Kamera, nicht unsere: der gepufferte Bereich beginnt womöglich
-   * bei Sekunde 48000, während `video.currentTime` auf 0 steht. Die
-   * Abspielposition liegt damit außerhalb des Puffers, und das Element
-   * fängt nie an — Daten kommen an, es passiert trotzdem nichts.
+   * Drei Aufgaben, die zusammengehören, weil alle drei am selben
+   * gepufferten Bereich hängen.
    *
-   * Chrome bügelt das still aus, Safari nicht. Genau dieser Unterschied
-   * hat uns "Daten fließen, kein Bild" beschert.
+   * **Position.** Die Segmente tragen die Zeitachse der Kamera, nicht
+   * unsere: der Puffer beginnt womöglich bei Sekunde 48000, während
+   * `video.currentTime` auf 0 steht. Die Abspielposition läge damit
+   * außerhalb des Puffers und das Element fängt nie an — Daten kommen an,
+   * es passiert trotzdem nichts. Chrome bügelt das still aus, Safari
+   * nicht; genau dieser Unterschied hat uns "Daten fließen, kein Bild"
+   * beschert.
    *
-   * Zweiter Zweck: ohne Wegschneiden wächst der Puffer bis zum
-   * QuotaExceeded. Bei einem Livestream ist alles außer den letzten
+   * **Tempo.** Übernimmt `liveRate()` aus pace.ts — dort steht auch,
+   * warum ein Regler und kein Schalter.
+   *
+   * Zurückgeholt wird die Position nur, wenn sie aus dem Fenster gefallen
+   * ist, und dann an dessen ANFANG statt ans Live-Ende. Vorher sprang
+   * diese Funktion auf `bufEnd - 0.5`. Das klingt richtiger, lässt aber
+   * ein halbes Polster übrig — und der nächste Netzhakler kommt bestimmt.
+   *
+   * **Schneiden.** Ohne Wegschneiden wächst der Puffer bis zum
+   * QuotaExceeded; bei einem Livestream ist alles außer den letzten
    * Sekunden ohnehin wertlos.
    */
-  const seekToLive = () => {
+  const pace = () => {
     if (!sb || sb.updating || !sb.buffered.length) return
 
-    const bufStart = sb.buffered.start(0)
     const bufEnd = sb.buffered.end(sb.buffered.length - 1)
-
-    const t = video.currentTime
-
-    // Gesprungen wird nur, wenn die Position WIRKLICH nicht mehr passt:
-    // außerhalb des Puffers oder weit abgeschlagen.
-    //
-    // Vorher stand hier ein Sprung, sobald der Rückstand MAX_LAG_S
-    // überschritt. Bei einem Livestream ist ein Rückstand von ein bis
-    // zwei Sekunden aber der NORMALZUSTAND — es wurde also bei praktisch
-    // jedem Segment gesprungen, und jeder Sprung kostet in Safari einen
-    // Dekoder-Neustart. Ergebnis: ruckelnde ~1 fps statt eines Bildes.
-    if (t < bufStart || t > bufEnd || bufEnd - t > RESYNC_S) {
-      video.currentTime = Math.max(bufStart, bufEnd - 0.5)
-      video.playbackRate = 1
-    } else {
-      // Kleinen Rückstand nicht springen, sondern aufholen. 5 % schneller
-      // fällt niemandem auf, ein Sprung sehr wohl.
-      video.playbackRate = bufEnd - t > MAX_LAG_S ? 1.05 : 1
-    }
-
     const keepFrom = bufEnd - LIVE_WINDOW_S
-    if (keepFrom > bufStart) {
+
+    // Erst schneiden, dann rechnen: danach steht fest, wo das Fenster
+    // wirklich beginnt.
+    if (keepFrom > sb.buffered.start(0)) {
       try {
-        sb.remove(bufStart, keepFrom)
+        sb.remove(sb.buffered.start(0), keepFrom)
         ms.setLiveSeekableRange?.(keepFrom, bufEnd)
       } catch { /* nächster Durchlauf */ }
     }
+
+    // Nicht unter den tatsächlichen Pufferanfang: solange weniger als
+    // LIVE_WINDOW_S gepuffert sind, liegt keepFrom davor, und ein Sprung
+    // dorthin führte ins Leere.
+    const windowStart = Math.max(keepFrom, sb.buffered.start(0))
+    if (video.currentTime < windowStart) video.currentTime = windowStart
+
+    const gap = bufEnd - video.currentTime
+    const rate = liveRate(gap)
+    // Nur bei echter Abweichung zuweisen. Jede Zuweisung feuert
+    // `ratechange`, und das mehrmals pro Sekunde je Kachel ist auf einem
+    // iPhone spürbar.
+    if (Math.abs(video.playbackRate - rate) > 0.02) video.playbackRate = rate
+    lastGap = gap
   }
 
   // Erst nachschieben, dann aufräumen — remove() setzt `updating`, der
   // nächste updateend erledigt dann wieder das Anhängen.
-  const onUpdateEnd = () => { flush(); seekToLive() }
+  const onUpdateEnd = () => { flush(); pace() }
 
   await new Promise<void>((resolve, reject) => {
     let settled = false
@@ -524,7 +551,7 @@ export async function connectMSE(
           done()
         }
 
-        queue.push(chunk)
+        enqueue(chunk)
         flush()
       } catch (err) {
         fail(err)
@@ -578,9 +605,22 @@ export async function connectMSE(
         offeredCodecs: safe(() => supportedCodecs()),
         bytesReceived,
         chunksAppended,
+        chunksDropped,
         queued: queue.length,
+        queuedBytes,
         sourceBufferUpdating: safe(() => sb?.updating ?? null),
         sourceBufferRanges: safe(() => (sb ? describeRanges(sb.buffered) : null)),
+        // Die vier Zeilen, an denen man Ruckeln erkennt, ohne zu raten:
+        // ein Rückstand nahe null bei readyState < 3 heißt "Puffer leer
+        // gelaufen", eine Rate dauerhaft am unteren Anschlag heißt "es
+        // kommt zu wenig nach".
+        lastGap: lastGap === null ? null : Number(lastGap.toFixed(2)),
+        playbackRate: safe(() => Number(video.playbackRate.toFixed(2))),
+        currentTime: safe(() => Number(video.currentTime.toFixed(1))),
+        videoReadyState: safe(() =>
+          ['HAVE_NOTHING', 'HAVE_METADATA', 'HAVE_CURRENT_DATA', 'HAVE_FUTURE_DATA', 'HAVE_ENOUGH_DATA'][
+            video.readyState
+          ] ?? video.readyState),
       }
     },
     close: cleanup,

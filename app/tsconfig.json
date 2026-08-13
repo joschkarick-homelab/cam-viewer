@@ -12,5 +12,8 @@
     "isolatedModules": true,
     "noEmit": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // node --test kompiliert selbst (Type-Stripping) und braucht
+  // @types/node, das wir uns für eine Datei nicht ins Projekt holen.
+  "exclude": ["src/**/*.test.ts"]
 }

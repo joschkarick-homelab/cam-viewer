@@ -508,9 +508,10 @@ Ein Tap legt alles als Text in die Zwischenablage:
   Stream-Name, dazu `readyState`, `buffered`, `currentTime` und
   Bildgröße des Video-Elements
 - **Je Transport** — bei MSE ausgehandelte und angebotene Codecs,
-  empfangene Bytes, angehängte Blöcke, Zustand der MediaSource; bei
-  WebRTC ICE-Zustände, empfangene Pakete, dekodierte Frames und der
-  gewählte Kandidat
+  empfangene Bytes, angehängte Blöcke, Zustand der MediaSource, dazu
+  `lastGap`, `playbackRate` und `videoReadyState`; bei WebRTC
+  ICE-Zustände, empfangene Pakete, dekodierte Frames und der gewählte
+  Kandidat
 - **Verlauf** — jeder Zustandswechsel und Fehlversuch mit Zeitstempel,
   wodurch Muster wie „verbindet alle 15 s neu" direkt ablesbar sind
 
@@ -527,6 +528,42 @@ kostet im Normalbetrieb nichts.
 
 `cams.json` liegt neben `index.html` und wird zur Laufzeit geladen —
 Kameras umbenennen oder ergänzen braucht **keinen neuen Build**.
+
+### Wenn das Bild ruckelt
+
+Erst die Frage klären, ob es an der App oder am Weg dorthin liegt.
+go2rtcs eigene Oberfläche taugt nur bedingt zum Vergleich: die ruft man
+im LAN auf (`http://192.168.2.166:1984`), die App von außen über
+NPMplus, authentik und TLS. Zwei verschiedene Wege — „bei go2rtc läuft's,
+in der App nicht" sagt für sich genommen also noch nichts über den Code.
+
+Sauber trennen lässt sich das mit einem Aufruf: die App **über die
+LAN-IP** öffnen und MSE erzwingen.
+
+```
+http://192.168.2.40:8091/?transport=mse&debug=1
+```
+
+Damit läuft derselbe Code über denselben kurzen Weg wie go2rtcs Player.
+
+- **Ruckelt hier nicht, von außen schon** → der Weg ist schuld, nicht die
+  App. Verdächtig sind Split-DNS (ohne das läuft der Verkehr vom Handy
+  im eigenen WLAN übers Internet hinaus und wieder herein), WLAN-Qualität
+  oder der Uplink.
+- **Ruckelt auch hier** → die App. Dann sagt die Diagnose, welche Sorte.
+
+Dafür sind `lastGap` und `playbackRate` da. `lastGap` ist der Rückstand
+zum Live-Ende in Sekunden, also das Polster, aus dem der Dekoder zehrt:
+
+| Befund | Bedeutung |
+|---|---|
+| `lastGap` ≈ 1, `playbackRate` ≈ 1 | Sollzustand |
+| `lastGap` nahe 0, `videoReadyState` unter `HAVE_FUTURE_DATA` | Puffer läuft leer — es kommt zu wenig nach |
+| `playbackRate` dauerhaft 0.1 | unterer Anschlag, der Stream hängt am Tropf |
+| `chunksDropped` steigt | der SourceBuffer nimmt nichts mehr an, Segmente werden verworfen |
+
+Danach nicht am Puffer drehen, sondern an der Zuleitung. Die Rate ist
+ein Regler, der sich selbst einpendelt — siehe `app/src/pace.ts`.
 
 ---
 
@@ -605,6 +642,23 @@ gedacht fürs Fire Tablet. Bietet der Client ein Profil an, das die
 Kamera nicht liefert, kann go2rtc den Stream falsch etikettieren — und
 Safari lehnt das mit `MEDIA_ERR_DECODE` ab, wo Chrome großzügig
 darüber hinwegsieht. H.264 handelt go2rtc ohnehin aus.
+
+**Die Abspielrate ist ein Regler, kein Schalter.** Bei MSE bestimmt
+`liveRate()` in `app/src/pace.ts` das Tempo aus dem Rückstand zum
+Live-Ende: Rate = Rückstand / Zielrückstand, gedeckelt auf 0,1 bis 2,0.
+Bei einer Sekunde ergibt das exakt 1,0, darüber wird aufgeholt, darunter
+**gebremst**.
+
+Das Bremsen ist der Teil, der zählt, und er hat zweimal gefehlt. Wer mit
+1,0 weiterspielt, während der Puffer leer läuft, läuft ihn garantiert
+leer: das Bild bleibt stehen, wartet aufs nächste Segment, ruckt weiter —
+bei jedem Netzhakler von neuem. Aus demselben Grund springt die App bei
+einem Resync an den **Anfang** des Fensters und nicht ans Live-Ende; ein
+Polster von einer halben Sekunde ist keins.
+
+`app/src/pace.test.ts` hält das fest (`cd app && npm test`, ohne
+Abhängigkeiten). Wer dort die Rate wieder auf „immer 1,0" vereinfacht,
+bekommt einen roten Test statt eines ruckelnden Babyfons.
 
 **Safari braucht einen eigenen MSE-Pfad.** Safari ab 17 (macOS wie iOS)
 bringt `ManagedMediaSource` statt `MediaSource` mit. Die will per
