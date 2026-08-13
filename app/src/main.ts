@@ -68,6 +68,21 @@ function useSubstream(): boolean {
   return (mem !== undefined && mem <= 2) || cores <= 4
 }
 
+/**
+ * Diagnoseanzeige an oder aus, `?debug=1` / `?debug=0`.
+ *
+ * Wie die anderen Parameter gemerkt — beim Einrichten will man sie nicht
+ * bei jedem Reload neu anhängen, auf dem Handy schon gar nicht.
+ */
+function debugEnabled(): boolean {
+  const forced = new URLSearchParams(location.search).get('debug')
+  if (forced === '1' || forced === '0') {
+    localStorage.setItem('debug', forced)
+    return forced === '1'
+  }
+  return localStorage.getItem('debug') === '1'
+}
+
 // ── Start ───────────────────────────────────────────────────────────
 
 async function main() {
@@ -83,6 +98,11 @@ async function main() {
   })
 
   buildBar(transport, sd)
+  // Nur bei Bedarf nachladen: die Diagnose kostet gut 1,5 kB, die im
+  // Normalbetrieb niemand braucht.
+  if (debugEnabled()) {
+    void import('./diagnostics').then((d) => d.mountDebugPanel(bar, tiles))
+  }
 
   // Alarm zentral verwalten: er verstummt erst, wenn KEINE Kachel mehr
   // im Zustand "lost" ist. Einzelne Kacheln können das nicht entscheiden.

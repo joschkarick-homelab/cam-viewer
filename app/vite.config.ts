@@ -1,6 +1,12 @@
 import { defineConfig } from 'vite'
 
 export default defineConfig({
+  // Zeitstempel des Builds. Steht in der Diagnose und beantwortet die
+  // Frage, die uns beim Einrichten mehrfach aufgehalten hat: Sieht das
+  // Gerät überhaupt den frisch deployten Stand?
+  define: {
+    __BUILD__: JSON.stringify(new Date().toISOString()),
+  },
   build: {
     // Ein einziges JS-Bundle. Kein Code-Splitting — bei dieser Größe
     // kostet ein zweiter Request mehr als er spart, gerade auf dem

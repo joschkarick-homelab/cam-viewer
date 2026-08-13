@@ -11,9 +11,13 @@
  * Zustand, in dem ein altes Standbild als Livebild durchgehen könnte.
  */
 
-import { connectWebRTC, connectMSE, type Connection, type Transport } from './transport'
+import {
+  connectWebRTC, connectMSE, describeRanges,
+  type Connection, type Transport,
+} from './transport'
 import { Watchdog, backoffMs } from './watchdog'
 import { startAlarm, stopAlarm } from './keepalive'
+import { logEvent } from './log'
 
 export type TileState = 'connecting' | 'live' | 'stalled' | 'lost'
 
@@ -193,6 +197,47 @@ export class CamTile {
   private note(msg: string) {
     console.warn(`[cam-viewer/${this.cam.id}] ${msg}`)
     this.reason.textContent = msg
+    logEvent(this.cam.id, msg)
+  }
+
+  /**
+   * Vollbild der Kachel für `?debug=1`.
+   *
+   * Bewusst alles auf einmal: Zustand, Zähler, Videoelement, Transport.
+   * Wer bei einem stummen Fehler sucht, weiß vorher nicht, welcher Wert
+   * der entscheidende ist — heute war es `buffered.length`, davor die
+   * ICE-Kandidaten, davor der ausgehandelte Codec.
+   */
+  async diagnostics(): Promise<Record<string, unknown>> {
+    const v = this.video
+    const out: Record<string, unknown> = {
+      id: this.cam.id,
+      src: this.src,
+      state: this.state,
+      attempt: this.attempt,
+      lastReason: this.reason.textContent || null,
+      staleForMs: this.dog?.staleFor() ?? null,
+      video: {
+        readyState: v.readyState,
+        networkState: v.networkState,
+        currentTime: Number(v.currentTime.toFixed(2)),
+        buffered: describeRanges(v.buffered),
+        size: `${v.videoWidth}x${v.videoHeight}`,
+        paused: v.paused,
+        muted: v.muted,
+        error: v.error ? `${v.error.code}: ${v.error.message}` : null,
+      },
+    }
+    if (this.conn) {
+      try {
+        Object.assign(out, await this.conn.diagnostics())
+      } catch (err) {
+        out.connDiagnosticsError = String(err)
+      }
+    } else {
+      out.connection = 'keine'
+    }
+    return out
   }
 
   private scheduleRetry() {
@@ -207,6 +252,7 @@ export class CamTile {
   }
 
   private setState(s: TileState) {
+    if (s !== this.state) logEvent(this.cam.id, `→ ${s}`)
     this.state = s
     this.el.dataset.state = s
     this.badge.textContent = {

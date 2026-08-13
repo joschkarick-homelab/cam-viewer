@@ -194,3 +194,33 @@ button.on {
    letzten Fehlversuchs die nützlichste Information überhaupt — beim
    ersten Versuch ist das Feld ohnehin leer. */
 .tile[data-state="live"] .reason { display: none; }
+
+/* ── Diagnose (?debug=1) ────────────────────────────────────────────
+   Bewusst schlicht und über allem: sie soll lesbar sein, wenn sonst
+   nichts funktioniert — auch auf einem Fire Tablet ohne Konsole. */
+
+.debug {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 45vh;
+  overflow: auto;
+  margin: 0;
+  padding: 10px 12px;
+  background: #000d;
+  color: #cfd6dd;
+  font: 11px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-top: 1px solid #2a313a;
+  z-index: 10;
+}
+
+/* Fällt die Zwischenablage aus (kein Secure Context), muss der Text
+   von Hand markierbar sein — dann darf er auch mehr Platz nehmen. */
+.debug.full {
+  max-height: 80vh;
+  user-select: all;
+  -webkit-user-select: all;
+}
