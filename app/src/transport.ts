@@ -15,6 +15,21 @@
 
 export type Transport = 'webrtc' | 'mse'
 
+/**
+ * Wert für die Diagnose holen, ohne dass ein Fehler alles mitreißt.
+ *
+ * Genau die Eigenschaften, die man bei einem Problem lesen will, sind
+ * die, die im Problemfall werfen — `sb.buffered` etwa, sobald der
+ * SourceBuffer abgelöst wurde.
+ */
+export function safe<T>(fn: () => T): T | string {
+  try {
+    return fn()
+  } catch (err) {
+    return `<Fehler: ${err instanceof Error ? err.message : String(err)}>`
+  }
+}
+
 /** Gepufferte Bereiche lesbar machen — "48123.4–48128.9" statt eines TimeRanges-Objekts. */
 export function describeRanges(r: TimeRanges): string {
   if (!r.length) return 'leer'
@@ -245,11 +260,18 @@ export const mseSupported = !!MediaSourceImpl
 
 /** Codecs, die go2rtc anbieten kann — gefiltert auf das, was dieser Browser wirklich kann. */
 function supportedCodecs(): string {
+  // Bewusst Zeichen für Zeichen die Liste aus go2rtcs eigenem Player
+  // (www/video-rtc.js, CODECS). Wir hatten hier zusätzlich
+  // 'avc1.42E01E' (H.264 Baseline) stehen, gedacht fürs Fire Tablet.
+  // Verdacht: bietet der Client Baseline an, während die Kamera High
+  // liefert, kann go2rtc den Stream mit dem falschen Profil etikettieren
+  // — und Safari lehnt so etwas mit MEDIA_ERR_DECODE ab, wo Chrome
+  // großzügig ist. H.264 handelt go2rtc ohnehin aus, die Zeile war also
+  // nie nötig.
   const candidates = [
-    'avc1.640029', 'avc1.64002A', 'avc1.640033', // H.264 High
-    'avc1.42E01E',                                // H.264 Baseline (Fire Tablet)
+    'avc1.640029', 'avc1.64002A', 'avc1.640033', // H.264 High 4.1/4.2/5.1
     'hvc1.1.6.L153.B0',                           // HEVC
-    'mp4a.40.2', 'mp4a.40.5',                     // AAC
+    'mp4a.40.2', 'mp4a.40.5',                     // AAC LC / HE
     'flac', 'opus',
   ]
   return candidates
@@ -453,19 +475,24 @@ export async function connectMSE(
     },
 
     async diagnostics() {
+      // Jeder Wert einzeln abgesichert. Ein `sb.buffered` auf einem
+      // abgelösten SourceBuffer wirft InvalidStateError — und riss
+      // vorher den GESAMTEN Abschnitt mit, ausgerechnet inklusive
+      // negotiatedCodecs. Eine Diagnose, die beim ersten Fehler
+      // aufgibt, ist genau dann nutzlos, wenn man sie braucht.
       return {
         transport: 'mse',
         managedMediaSource,
-        wsReadyState: ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][ws.readyState] ?? ws.readyState,
-        mediaSourceReadyState: ms.readyState,
+        wsReadyState: safe(() =>
+          ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][ws.readyState] ?? ws.readyState),
+        mediaSourceReadyState: safe(() => ms.readyState),
         negotiatedCodecs,
-        offeredCodecs: supportedCodecs(),
+        offeredCodecs: safe(() => supportedCodecs()),
         bytesReceived,
         chunksAppended,
         queued: queue.length,
-        sourceBuffer: sb
-          ? { updating: sb.updating, mode: sb.mode, ranges: describeRanges(sb.buffered) }
-          : null,
+        sourceBufferUpdating: safe(() => sb?.updating ?? null),
+        sourceBufferRanges: safe(() => (sb ? describeRanges(sb.buffered) : null)),
       }
     },
     close: cleanup,

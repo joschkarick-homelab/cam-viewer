@@ -8,7 +8,7 @@ Ausgelegt auf **Babycam-Betrieb**: Bildschirm bleibt an, Verbindungs-
 abbrüche sind unübersehbar, und ein eingefrorenes Bild wird niemals als
 Livebild dargestellt.
 
-Bundle: ~5,9 kB JS + 1,3 kB CSS (gzip), kein Framework.
+Bundle: ~6,0 kB JS + 1,3 kB CSS (gzip), kein Framework.
 
 ---
 
@@ -534,6 +534,14 @@ dass die Cam nach längerem Ausfall erst Minuten später zurückkommt.
 ---
 
 ## Bekannte Grenzen
+
+**Codecliste nicht erweitern.** `supportedCodecs()` in `transport.ts`
+entspricht Zeichen für Zeichen der Liste aus go2rtcs eigenem Player.
+Hier stand zwischenzeitlich zusätzlich `avc1.42E01E` (H.264 Baseline),
+gedacht fürs Fire Tablet. Bietet der Client ein Profil an, das die
+Kamera nicht liefert, kann go2rtc den Stream falsch etikettieren — und
+Safari lehnt das mit `MEDIA_ERR_DECODE` ab, wo Chrome großzügig
+darüber hinwegsieht. H.264 handelt go2rtc ohnehin aus.
 
 **Safari braucht einen eigenen MSE-Pfad.** Safari ab 17 (macOS wie iOS)
 bringt `ManagedMediaSource` statt `MediaSource` mit. Die will per
