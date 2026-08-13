@@ -15,6 +15,9 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read   # zum Pullen des privaten GHCR-Images
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
 
     steps:
@@ -109,17 +112,30 @@ jobs:
               docker-compose.prod.yml stack.env \
               "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/"
 
+      # Das GHCR-Package ist privat, die LXC braucht zum Pullen also
+      # Zugangsdaten. Statt dort dauerhaft einen PAT zu hinterlegen,
+      # reichen wir das ohnehin vorhandene, nach dem Lauf ungültige
+      # GITHUB_TOKEN durch — über stdin, damit es weder in der
+      # Prozessliste noch in der Shell-History der LXC auftaucht. Am Ende
+      # wird die Anmeldung wieder entfernt.
       - name: Pull image & restart stack (via Tailscale SSH)
         env:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
         run: |
-          ssh -o StrictHostKeyChecking=accept-new \
+          printf '%s' "$GHCR_TOKEN" | ssh -o StrictHostKeyChecking=accept-new \
               -o UserKnownHostsFile=/dev/null \
-              "${DEPLOY_USER}@${DEPLOY_HOST}" \
-              "cd ${DEPLOY_PATH} \
-               && chmod 600 stack.env \
-               && docker compose -f docker-compose.prod.yml --env-file stack.env pull \
-               && docker compose -f docker-compose.prod.yml --env-file stack.env up -d --remove-orphans \
-               && docker image prune -f"
+              "${DEPLOY_USER}@${DEPLOY_HOST}" "
+            docker login ghcr.io -u '${GHCR_USER}' --password-stdin \
+              && cd '${DEPLOY_PATH}' \
+              && chmod 600 stack.env \
+              && docker compose -f docker-compose.prod.yml --env-file stack.env pull \
+              && docker compose -f docker-compose.prod.yml --env-file stack.env up -d --remove-orphans \
+              && docker image prune -f
+            rc=\$?
+            docker logout ghcr.io >/dev/null 2>&1 || true
+            exit \$rc
+          "
