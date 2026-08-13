@@ -8,7 +8,7 @@ Ausgelegt auf **Babycam-Betrieb**: Bildschirm bleibt an, Verbindungs-
 abbrüche sind unübersehbar, und ein eingefrorenes Bild wird niemals als
 Livebild dargestellt.
 
-Bundle: ~6,0 kB JS + 1,3 kB CSS (gzip), kein Framework.
+Bundle: ~6,3 kB JS + 1,3 kB CSS (gzip), kein Framework.
 
 ---
 
@@ -534,6 +534,24 @@ dass die Cam nach längerem Ausfall erst Minuten später zurückkommt.
 ---
 
 ## Bekannte Grenzen
+
+**Der Codec-String von go2rtc stimmt bei `tapo://` nicht.** Er wird aus
+der fmtp-Zeile der Quelle abgeleitet — die `tapo://` gar nicht liefert
+(`pkg/tapo/producer.go` legt den Codec ohne `FmtpLine` an). go2rtcs
+`GetProfileLevelID("")` fällt dann auf fest verdrahtete Werte zurück und
+meldet für **jede** Tapo-Cam `avc1.640029`, also H.264 High 4.1,
+unabhängig vom tatsächlichen Bitstrom.
+
+Safari gleicht den deklarierten String gegen die SPS ab und lehnt bei
+Abweichung mit `MEDIA_ERR_DECODE` ab (sichtbar als Bildgröße `128x96`);
+Chrome sieht darüber hinweg. Das war die Ursache für „läuft in Chrome,
+nicht in Safari".
+
+`correctH264Codec()` in `transport.ts` liest deshalb Profil, Kompatibi-
+lität und Level aus der `avcC`-Box des Init-Segments und ersetzt den
+`avc1`-Teil, bevor der `SourceBuffer` entsteht. Der Audio-Teil bleibt
+unangetastet. Schlägt der korrigierte String fehl, wird go2rtcs
+ursprünglicher versucht.
 
 **Codecliste nicht erweitern.** `supportedCodecs()` in `transport.ts`
 entspricht Zeichen für Zeichen der Liste aus go2rtcs eigenem Player.
