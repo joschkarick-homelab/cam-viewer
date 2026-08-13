@@ -503,6 +503,14 @@ dass die Cam nach längerem Ausfall erst Minuten später zurückkommt.
 
 ## Bekannte Grenzen
 
+**Safari braucht einen eigenen MSE-Pfad.** Safari ab 17 (macOS wie iOS)
+bringt `ManagedMediaSource` statt `MediaSource` mit. Die will per
+`srcObject` angehängt werden statt per `createObjectURL`, und sie öffnet
+sich erst, wenn das Video-Element wirklich Daten anfordert — also erst
+nach `play()`. Beides steht in `transport.ts`; wer dort aufräumt, sollte
+es wissen, denn der Fehler äußert sich nicht als Fehler, sondern als
+ewiges „Verbinde…" ausschließlich in Safari.
+
 **iOS im Hintergrund.** Wischst du die PWA weg oder sperrst das iPhone,
 suspendiert iOS sie — der Ton ist weg. Wake Lock hält den Bildschirm
 an, solange die App im Vordergrund ist. Ein echter Hintergrund-Betrieb
