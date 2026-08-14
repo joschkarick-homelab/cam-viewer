@@ -392,17 +392,45 @@ echo '<PAT>' | docker login ghcr.io -u <github-user> --password-stdin
 
 ## Bedienung
 
-Ein Tap auf **„Ton & Bildschirm an"** erledigt drei Dinge auf einmal:
-AudioContext entsperren (nötig für den Alarm), Wake Lock anfordern und
-den Ton der ersten Cam freigeben. Browser verlangen dafür eine echte
-Nutzergeste — das lässt sich nicht automatisieren.
+Tap auf eine Kachel → Vollbild. Der Knopf **⧉** oben links auf jeder
+Kachel schaltet Bild-in-Bild.
 
-Tap auf eine Kachel → Vollbild.
+### Ton
 
-Danach steht pro Kamera ein Schalter in der Leiste: **Ton lässt sich für
-beliebig viele Cams gleichzeitig anschalten.** Zwei Kinderzimmer parallel
-zu hören ist bei einer Babycam der eigentliche Zweck; ob drei Streams
-gleichzeitig noch sinnvoll sind, entscheidest du.
+**Ton ist der Normalzustand, nicht die Ausnahme.** Welche Cam nach dem
+Start Ton hat, steht als `sound` in `cams.json` — ohne Angabe gilt
+`true`. Die Datei wird zur Laufzeit gelesen, eine Änderung braucht also
+keinen neuen Build, nur ein Neuladen.
+
+Die App versucht den Ton gleich beim Start anzuschalten. Auf dem Desktop
+klappt das oft von selbst; sonst verlangen Browser eine echte Nutzergeste
+und es bleibt beim Tap auf **„Ton & Bildschirm an"**. Der Knopf erledigt
+ohnehin zwei weitere Dinge, die ohne Geste nirgends gehen: AudioContext
+entsperren (nötig für den Alarm) und Wake Lock anfordern. Läuft der Ton
+schon, heißt er nur noch „Bildschirm anlassen".
+
+Pro Kamera steht dann ein Schalter in der Leiste — **Ton lässt sich für
+beliebig viele Cams gleichzeitig anschalten**.
+
+Diese Schalter werden bewusst **nicht gemerkt**. Nach einem Neuladen gilt
+wieder, was in `cams.json` steht. Bei einem Babyfon ist das die sichere
+Richtung: ein Kanal, den jemand einmal versehentlich stumm geschaltet
+hat, darf nicht tagelang stumm bleiben.
+
+### Bild-in-Bild
+
+Der eigentliche Gewinn steckt auf dem iPhone: **iOS spielt ein
+PiP-Fenster weiter, wenn die App in den Hintergrund geht.** Ohne PiP ist
+der Stream weg, sobald man die App wegwischt — siehe „Bekannte Grenzen".
+
+Safari (macOS wie iOS) wird über `webkitSetPresentationMode` bedient,
+alle anderen über `requestPictureInPicture()`. Auf iOS meldet
+`document.pictureInPictureEnabled` gar nichts, deshalb die Abfrage über
+beide Wege. Kann ein Gerät es nicht, erscheint der Knopf erst gar nicht.
+
+Ein Reconnect beendet das PiP-Fenster: beim Aufräumen läuft
+`video.load()`, und das lässt sich nicht umgehen. Nach einem Aussetzer
+muss PiP also neu angefordert werden.
 
 ### Kachelzustände
 

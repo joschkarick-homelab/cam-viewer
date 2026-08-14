@@ -177,6 +177,34 @@ button.on {
 /* Stummschaltung sichtbar machen */
 .tile[data-muted="false"] .label::after { content: " 🔊"; }
 
+/* ── Bild-in-Bild ───────────────────────────────────────────────────
+   Oben links, weil oben rechts das Statusabzeichen sitzt. Zurückhaltend
+   gehalten: das Ding steht nachts im Schlafzimmer und soll nicht
+   leuchten, aber mit müden Augen und Kind auf dem Arm noch treffbar
+   sein — daher trotz kleinem Symbol die vollen 44 px. */
+
+.pip {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0;
+  font-size: 17px;
+  line-height: 1;
+  background: #000a;
+  border-color: #ffffff26;
+  color: var(--dim);
+  backdrop-filter: blur(4px);
+  opacity: 0.55;
+}
+
+.pip:hover, .pip:focus-visible { opacity: 1; color: var(--fg); }
+
+/* Ohne Bild gibt es nichts ins kleine Fenster zu schieben. */
+.tile[data-state="connecting"] .pip,
+.tile[data-state="lost"] .pip { display: none; }
+
 /* Fehlergrund — nur sichtbar, wenn die Kachel ohnehin nicht live ist.
    Auf dem Fire Tablet gibt es keine Konsole; ohne diese Zeile stünde
    dort nur "Verbindung weg" ohne jeden Anhaltspunkt. */
