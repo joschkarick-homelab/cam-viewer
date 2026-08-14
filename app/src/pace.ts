@@ -62,3 +62,37 @@ export function liveRate(gap: number): number {
   if (!Number.isFinite(gap)) return 1
   return Math.min(MAX_RATE, Math.max(MIN_RATE, gap / TARGET_LAG_S))
 }
+
+/**
+ * Sicherheitsabstand beim Zurückholen der Abspielposition, in Sekunden.
+ *
+ * Klein genug, um nicht aufzufallen, groß genug, um die Ungenauigkeit
+ * beim Suchen zu überdecken — siehe `seekTarget()`.
+ */
+export const SEEK_MARGIN_S = 0.1
+
+/**
+ * Wohin die Abspielposition zurückgeholt werden muss — oder `null`, wenn
+ * sie im Puffer liegt und nichts zu tun ist.
+ *
+ * Zwei Regeln, beide teuer gelernt:
+ *
+ * **Nur bei echtem Herausfallen.** Die Bedingung ist `t < bufStart`, und
+ * das Ziel liegt strikt darüber. Sonst kann der nächste Aufruf dieselbe
+ * Bedingung erneut erfüllen — eine Endlosschleife aus Sprüngen, die nie
+ * abspielt.
+ *
+ * **Nicht auf die Kante.** Genau das ist passiert: Sprung auf den
+ * Pufferanfang, WebKit landet 0,03 s davor, Position wieder außerhalb,
+ * Sprung, wieder davor. Die Kachel stand bei `readyState: 4` und
+ * `paused: true` still, während Daten hereinliefen — von außen nicht von
+ * einem toten Stream zu unterscheiden.
+ *
+ * Chrome verzeiht das, weil es beim Suchen nach vorne rundet. Ein
+ * Verhalten, das man nicht voraussetzen darf.
+ */
+export function seekTarget(t: number, bufStart: number, bufEnd: number): number | null {
+  if (!Number.isFinite(t) || !Number.isFinite(bufStart) || !(bufEnd > bufStart)) return null
+  if (t >= bufStart) return null
+  return Math.min(bufEnd, bufStart + SEEK_MARGIN_S)
+}
