@@ -424,12 +424,10 @@ export async function connectMSE(
    * **Tempo.** Übernimmt `liveRate()` aus pace.ts — dort steht auch,
    * warum ein Regler und kein Schalter.
    *
-   * Zurückgeholt wird die Position nur, wenn sie aus dem Puffer gefallen
-   * ist, und dann an dessen Anfang statt ans Live-Ende — `seekTarget()`
-   * in pace.ts entscheidet das und begründet den Sicherheitsabstand.
-   * Vorher sprang diese Funktion auf `bufEnd - 0.5`; das klingt richtiger,
-   * lässt aber ein halbes Polster übrig, und der nächste Netzhakler kommt
-   * bestimmt.
+   * Gesprungen wird, wenn der Rückstand zu groß geworden ist oder die
+   * Position aus dem Puffer gefallen ist — `seekTarget()` in pace.ts
+   * entscheidet das, begründet den Sicherheitsabstand und hält die
+   * Zusage, dass nie ein veraltetes Bild stehen bleibt.
    *
    * **Schneiden.** Ohne Wegschneiden wächst der Puffer bis zum
    * QuotaExceeded; bei einem Livestream ist alles außer den letzten

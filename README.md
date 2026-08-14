@@ -272,7 +272,14 @@ er durch. Eine LAN-IP genügt damit, von außen greift authentik.
 
 Internes DNS muss `cam.DEINE-DOMAIN.tld` auf die **LAN-IP von NPMplus**
 zeigen. Sonst laufen interne Geräte über den Internet-Umweg und bekommen
-fälschlich den Login.
+fälschlich den Login — und, weniger offensichtlich, sie schleppen jedes
+Videopaket zweimal durch den Uplink, was sich als Ruckeln zeigt.
+
+An einer FRITZ!Box geht das über *Heimnetz → Netzwerk → Netzwerk-
+einstellungen → DNS-Rebind-Schutz*: dort den Hostnamen als Ausnahme
+eintragen. Ohne diese Ausnahme verwirft die Box die Antwort mit der
+LAN-IP, weil ein öffentlicher Name, der auf eine private Adresse zeigt,
+genau das Muster eines Rebind-Angriffs ist.
 
 ### 4. HomeKit umziehen (optional)
 
@@ -643,22 +650,37 @@ Kamera nicht liefert, kann go2rtc den Stream falsch etikettieren — und
 Safari lehnt das mit `MEDIA_ERR_DECODE` ab, wo Chrome großzügig
 darüber hinwegsieht. H.264 handelt go2rtc ohnehin aus.
 
-**Die Abspielrate ist ein Regler, kein Schalter.** Bei MSE bestimmt
-`liveRate()` in `app/src/pace.ts` das Tempo aus dem Rückstand zum
+**Live schlägt flüssig — und beides steht in `app/src/pace.ts`.** Zwei
+Mechanismen, die zusammen dafür sorgen, dass nie ein veraltetes Bild
+stehen bleibt:
+
+*Der Regler.* `liveRate()` bestimmt das Tempo aus dem Rückstand zum
 Live-Ende: Rate = Rückstand / Zielrückstand, gedeckelt auf 0,1 bis 2,0.
 Bei einer Sekunde ergibt das exakt 1,0, darüber wird aufgeholt, darunter
-**gebremst**.
+**gebremst**. Das Bremsen ist der Teil, der zählt, und er hat zweimal
+gefehlt: wer mit 1,0 weiterspielt, während der Puffer leer läuft, läuft
+ihn garantiert leer — Bild steht, wartet aufs nächste Segment, ruckt
+weiter, bei jedem Netzhakler von neuem.
 
-Das Bremsen ist der Teil, der zählt, und er hat zweimal gefehlt. Wer mit
-1,0 weiterspielt, während der Puffer leer läuft, läuft ihn garantiert
-leer: das Bild bleibt stehen, wartet aufs nächste Segment, ruckt weiter —
-bei jedem Netzhakler von neuem. Aus demselben Grund springt die App bei
-einem Resync an den **Anfang** des Fensters und nicht ans Live-Ende; ein
-Polster von einer halben Sekunde ist keins.
+*Die Obergrenze.* `seekTarget()` springt, sobald der Rückstand
+`MAX_LAG_S` (2,5 s) übersteigt, und überspringt die Bilder dazwischen.
+Ein Babyfon, das Vergangenheit zeigt, ist schlimmer als eines, das Bilder
+auslässt. Der Regler davor macht diesen Sprung zum Notnagel, den man im
+Alltag nicht zu sehen bekommt — genau hier stand einmal eine 2 **ohne**
+Regler, und dann wurde bei praktisch jedem Segment gesprungen: in Safari
+kostet jeder Sprung einen Dekoder-Neustart, sichtbar als ~1 fps.
 
-`app/src/pace.test.ts` hält das fest (`cd app && npm test`, ohne
-Abhängigkeiten). Wer dort die Rate wieder auf „immer 1,0" vereinfacht,
-bekommt einen roten Test statt eines ruckelnden Babyfons.
+Gesprungen wird nie auf eine Pufferkante. Ein Sprung auf exakt den
+Pufferanfang endete in einer Endlosschleife, weil WebKit minimal davor
+landet (9,97 statt 10,0) und die Bedingung damit sofort wieder erfüllt
+war; die Kachel stand bei `readyState: 4` und `paused: true` still,
+während Daten hereinliefen. Chrome verdeckt das, weil es nach vorne
+rundet.
+
+`app/src/pace.test.ts` hält all das fest (`cd app && npm test`, ohne
+Abhängigkeiten): dass unterhalb des Ziels gebremst wird, dass zu alte
+Bilder übersprungen werden, und dass kein Sprungziel die Sprungbedingung
+erneut erfüllt.
 
 **Safari braucht einen eigenen MSE-Pfad.** Safari ab 17 (macOS wie iOS)
 bringt `ManagedMediaSource` statt `MediaSource` mit. Die will per

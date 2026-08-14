@@ -23,6 +23,25 @@ export const LIVE_WINDOW_S = 5
 export const TARGET_LAG_S = 1
 
 /**
+ * Obergrenze für den Rückstand. Darüber wird gesprungen statt geregelt.
+ *
+ * Das ist die harte Zusage: **es wird nie ein Bild gezeigt, das älter
+ * als MAX_LAG_S ist.** Wer weiter zurückliegt, überspringt die Bilder
+ * dazwischen — bei einem Babyfon ist ein Sprung harmlos, ein veraltetes
+ * Bild nicht.
+ *
+ * Der Abstand zum Zielrückstand ist Absicht. Genau hier stand einmal
+ * eine 2, während gleichzeitig gar nicht geregelt wurde: der Rückstand
+ * lag im Normalbetrieb ständig darüber, es wurde bei praktisch jedem
+ * Segment gesprungen, und jeder Sprung kostet in Safari einen
+ * Dekoder-Neustart — sichtbar als ~1 fps. Mit dem Regler davor ist der
+ * Sprung der Notnagel, den man im Alltag nicht zu sehen bekommt: der
+ * Rückstand pendelt sich bei TARGET_LAG_S ein und erreicht diese Grenze
+ * nur, wenn wirklich zu wenig ankommt.
+ */
+export const MAX_LAG_S = 2.5
+
+/**
  * Untere Schranke: bei 0,1 läuft das Bild in Zeitlupe weiter, statt
  * stehen zu bleiben — der Puffer bekommt Zeit, sich zu füllen.
  */
@@ -72,27 +91,44 @@ export function liveRate(gap: number): number {
 export const SEEK_MARGIN_S = 0.1
 
 /**
- * Wohin die Abspielposition zurückgeholt werden muss — oder `null`, wenn
- * sie im Puffer liegt und nichts zu tun ist.
+ * Wohin die Abspielposition springen muss — oder `null`, wenn sie passt.
  *
- * Zwei Regeln, beide teuer gelernt:
+ * Gesprungen wird aus zwei Gründen:
  *
- * **Nur bei echtem Herausfallen.** Die Bedingung ist `t < bufStart`, und
- * das Ziel liegt strikt darüber. Sonst kann der nächste Aufruf dieselbe
- * Bedingung erneut erfüllen — eine Endlosschleife aus Sprüngen, die nie
- * abspielt.
+ * 1. **Zu alt.** Der Rückstand übersteigt MAX_LAG_S. Die Bilder dazwischen
+ *    werden übersprungen. Das ist die wichtigere der beiden Regeln: ein
+ *    Babyfon, das Vergangenheit zeigt, ist schlimmer als eines, das
+ *    Bilder auslässt.
+ * 2. **Aus dem Puffer gefallen.** Die Position liegt vor dem gepufferten
+ *    Bereich, es gibt dort schlicht nichts zu dekodieren.
  *
- * **Nicht auf die Kante.** Genau das ist passiert: Sprung auf den
- * Pufferanfang, WebKit landet 0,03 s davor, Position wieder außerhalb,
- * Sprung, wieder davor. Die Kachel stand bei `readyState: 4` und
- * `paused: true` still, während Daten hereinliefen — von außen nicht von
- * einem toten Stream zu unterscheiden.
+ * Das Ziel ist in beiden Fällen dasselbe: TARGET_LAG_S hinter dem
+ * Live-Ende. Nicht ans Live-Ende selbst — dort bliebe kein Polster, und
+ * der nächste Netzhakler ließe den Puffer sofort leer laufen. Und nicht
+ * an den Pufferanfang, wie es hier zwischenzeitlich stand: das gab zwar
+ * das größte Polster, hieß aber im Ernstfall fünf Sekunden Rückstand.
  *
- * Chrome verzeiht das, weil es beim Suchen nach vorne rundet. Ein
- * Verhalten, das man nicht voraussetzen darf.
+ * **Nie auf die Kante.** Der Sprung landet immer strikt IM Puffer. Ein
+ * Sprung auf exakt den Pufferanfang endete in einer Endlosschleife:
+ * WebKit landet beim Suchen minimal davor (9,97 statt 10,0), die
+ * Bedingung war sofort wieder erfüllt, es wurde nie abgespielt. Die
+ * Kachel stand bei `readyState: 4` und `paused: true` still, während
+ * Daten hereinliefen — von außen nicht von einem toten Stream zu
+ * unterscheiden. Chrome verdeckt das, weil es beim Suchen nach vorne
+ * rundet; darauf darf man sich nicht verlassen.
+ *
+ * Aus demselben Grund muss das Ziel die Sprungbedingung selbst nicht
+ * mehr erfüllen — sonst springt der nächste Aufruf erneut. Das hält
+ * `TARGET_LAG_S < MAX_LAG_S` sicher, und der Test wacht darüber.
  */
 export function seekTarget(t: number, bufStart: number, bufEnd: number): number | null {
   if (!Number.isFinite(t) || !Number.isFinite(bufStart) || !(bufEnd > bufStart)) return null
-  if (t >= bufStart) return null
-  return Math.min(bufEnd, bufStart + SEEK_MARGIN_S)
+
+  const zuAlt = bufEnd - t > MAX_LAG_S
+  const ausDemPuffer = t < bufStart
+  if (!zuAlt && !ausDemPuffer) return null
+
+  // Untere Schranke zuerst, obere zuletzt: bei einem Puffer, der kürzer
+  // als der Sicherheitsabstand ist, gewinnt bufEnd.
+  return Math.min(bufEnd, Math.max(bufStart + SEEK_MARGIN_S, bufEnd - TARGET_LAG_S))
 }
