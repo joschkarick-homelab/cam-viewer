@@ -13,7 +13,7 @@
  * Die Auswahl trifft nicht der Nutzer, sondern `pickTransport()` in main.ts.
  */
 
-import { LIVE_WINDOW_S, liveRate } from './pace'
+import { LIVE_WINDOW_S, liveRate, seekTarget } from './pace'
 
 export type Transport = 'webrtc' | 'mse'
 
@@ -424,10 +424,12 @@ export async function connectMSE(
    * **Tempo.** Übernimmt `liveRate()` aus pace.ts — dort steht auch,
    * warum ein Regler und kein Schalter.
    *
-   * Zurückgeholt wird die Position nur, wenn sie aus dem Fenster gefallen
-   * ist, und dann an dessen ANFANG statt ans Live-Ende. Vorher sprang
-   * diese Funktion auf `bufEnd - 0.5`. Das klingt richtiger, lässt aber
-   * ein halbes Polster übrig — und der nächste Netzhakler kommt bestimmt.
+   * Zurückgeholt wird die Position nur, wenn sie aus dem Puffer gefallen
+   * ist, und dann an dessen Anfang statt ans Live-Ende — `seekTarget()`
+   * in pace.ts entscheidet das und begründet den Sicherheitsabstand.
+   * Vorher sprang diese Funktion auf `bufEnd - 0.5`; das klingt richtiger,
+   * lässt aber ein halbes Polster übrig, und der nächste Netzhakler kommt
+   * bestimmt.
    *
    * **Schneiden.** Ohne Wegschneiden wächst der Puffer bis zum
    * QuotaExceeded; bei einem Livestream ist alles außer den letzten
@@ -448,11 +450,17 @@ export async function connectMSE(
       } catch { /* nächster Durchlauf */ }
     }
 
-    // Nicht unter den tatsächlichen Pufferanfang: solange weniger als
-    // LIVE_WINDOW_S gepuffert sind, liegt keepFrom davor, und ein Sprung
-    // dorthin führte ins Leere.
-    const windowStart = Math.max(keepFrom, sb.buffered.start(0))
-    if (video.currentTime < windowStart) video.currentTime = windowStart
+    const target = seekTarget(video.currentTime, sb.buffered.start(0), bufEnd)
+    if (target !== null) video.currentTime = target
+
+    // Ein pausiertes Element holt sich von selbst nichts mehr.
+    //
+    // `play()` läuft einmal beim Aufbau — und lehnt der Browser dort ab,
+    // versuchte es bisher nie wieder jemand. Bei ManagedMediaSource ist
+    // das ein Rennen: play() kommt, bevor überhaupt Daten da sind. Auf
+    // dem iPhone stand deshalb eine Kachel bei `readyState: 4` mit
+    // `paused: true` — volle Puffer, kein Bild.
+    if (video.paused && video.readyState >= 2) void video.play().catch(() => {})
 
     const gap = bufEnd - video.currentTime
     const rate = liveRate(gap)
