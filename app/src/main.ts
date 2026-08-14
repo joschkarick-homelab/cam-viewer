@@ -112,6 +112,12 @@ async function main() {
 
   await Promise.all(tiles.map((t) => t.connect()))
 
+  // Ton sofort versuchen. Klappt das (Desktop mit Media Engagement,
+  // teils auch die installierte PWA), spart es den Tap; klappt es nicht,
+  // bleibt alles stumm und der Knopf in der Leiste erledigt es später.
+  const results = await Promise.all(tiles.map((t) => t.tryUnmute()))
+  if (results.every(Boolean)) soundReady()
+
   // Nach einem Suspend (Deckel zu, Tab weg) sind die Streams meist tot,
   // ohne dass ein Event feuert. Beim Zurückkommen prüfen wir aktiv nach.
   document.addEventListener('visibilitychange', () => {
@@ -122,17 +128,24 @@ async function main() {
 
 // ── Bedienleiste ────────────────────────────────────────────────────
 
+let startButton: HTMLButtonElement | null = null
+
 function buildBar(transport: Transport, sd: boolean) {
   // Ein einziger Tap, der drei Dinge gleichzeitig erledigt: AudioContext
-  // entsperren (sonst kein Alarm), Wake Lock anfordern (browser verlangen
-  // dafür teils eine Geste) und den Ton der ersten Cam freigeben.
+  // entsperren (sonst kein Alarm), Wake Lock anfordern (Browser verlangen
+  // dafür teils eine Geste) und den Ton freigeben.
+  //
+  // Der Knopf bleibt auch dann nötig, wenn der Ton schon von selbst
+  // läuft — Wake Lock gibt es ohne Geste nirgends.
   const start = button('🔊 Ton & Bildschirm an', async () => {
     unlockAudio()
     await keepScreenOn()
-    tiles[0]?.setMuted(false)
+    await Promise.all(tiles.map((t) => t.tryUnmute()))
+    soundReady()
     start.remove()
-    bar.prepend(soundPicker())
+    startButton = null
   })
+  startButton = start
 
   const info = document.createElement('span')
   info.className = 'info'
@@ -146,13 +159,31 @@ function buildBar(transport: Transport, sd: boolean) {
 }
 
 /**
+ * Der Ton läuft — Schalter zeigen und den Knopf umbeschriften.
+ *
+ * Getrennt vom Knopf selbst, weil der Ton auf zwei Wegen angehen kann:
+ * durch den Tap oder gleich beim Start, wenn der Browser es zulässt.
+ */
+function soundReady() {
+  if (!bar.querySelector('.picker')) bar.prepend(soundPicker())
+  // Der Ton ist erledigt, der Bildschirm noch nicht.
+  if (startButton) startButton.textContent = '🔆 Bildschirm anlassen'
+}
+
+/**
  * Ton pro Kamera einzeln schaltbar.
  *
  * Ursprünglich war das eine Auswahl — genau eine Cam mit Ton, weil drei
  * gleichzeitig nur Matsch ergeben. Für eine Babycam ist das aber zu
  * eng: zwei Kinderzimmer gleichzeitig zu hören ist der eigentliche
- * Zweck. Ob drei Streams sinnvoll sind, entscheidet jetzt der Mensch
- * davor und nicht diese Funktion.
+ * Zweck. Ob drei Streams sinnvoll sind, entscheidet der Mensch davor —
+ * und was beim Start anliegt, steht als `sound` in `cams.json`.
+ *
+ * Die Schalter werden bewusst NICHT gemerkt. Nach einem Neuladen gilt
+ * wieder, was in `cams.json` steht. Bei einem Babyfon ist das die
+ * sichere Richtung: ein versehentlich stumm gebliebener Kanal darf nicht
+ * über Tage hinweg stumm bleiben, nur weil ihn einmal jemand ausgemacht
+ * hat.
  */
 function soundPicker(): HTMLElement {
   const wrap = document.createElement('div')

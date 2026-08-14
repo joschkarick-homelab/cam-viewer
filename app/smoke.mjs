@@ -42,5 +42,17 @@ console.log('...')
 const verlauf = panel?.split('-- Verlauf --')[1] ?? ''
 console.log('-- Verlauf --' + verlauf.split('\n').slice(0, 10).join('\n'))
 console.log('\n=== Kopierknopf:', await page.textContent('#bar button:last-of-type'))
+
+// Bild-in-Bild: Chromium meldet Unterstützung, also muss je Kachel ein
+// Knopf im DOM stehen. Sichtbar ist er hier nicht — ohne Bild blendet
+// CSS ihn aus, und genau das soll auch so sein.
+console.log('=== PiP-Knöpfe (erwartet 3):', await page.locator('.tile .pip').count())
+
+// Ohne Stream lehnt play() ab, der Ton darf also NICHT angehen. Wichtig
+// ist, dass die Kacheln danach trotzdem stumm weiterlaufen statt zu
+// hängen — ein fehlgeschlagenes Entstummen darf nichts abreißen.
+console.log('=== Kacheln stumm (erwartet true):',
+  await page.locator('video').evaluateAll((vs) => vs.every((v) => v.muted)))
+
 console.log('=== Unerwartete Fehler:', errors.filter(e => !e.includes('Failed to load resource') && !e.includes('WebSocket')).length)
 await browser.close()

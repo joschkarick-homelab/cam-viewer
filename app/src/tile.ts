@@ -28,6 +28,28 @@ export interface CamConfig {
   sd?: string
   /** Bei Verbindungsverlust Alarm auslösen. Für die Babycams: ja. */
   alarm?: boolean
+  /**
+   * Ton nach dem Start an? Fehlt der Wert, gilt `true`.
+   *
+   * Absicht: bei einem Babyfon ist Ton der Normalfall, nicht die
+   * Ausnahme. Der Wert steht in `cams.json` und ist damit ohne neuen
+   * Build änderbar — wer eine Cam stumm haben will, setzt dort `false`.
+   */
+  sound?: boolean
+}
+
+/**
+ * Kann dieses Gerät Bild-in-Bild?
+ *
+ * Zwei Wege, weil Safari (macOS wie iOS) die Standard-API lange nicht
+ * hatte und bis heute den eigenen Weg zuverlässiger bedient. iOS meldet
+ * `document.pictureInPictureEnabled` gar nicht erst.
+ */
+function pipSupported(video: HTMLVideoElement): boolean {
+  return (
+    document.pictureInPictureEnabled === true ||
+    typeof (video as any).webkitSetPresentationMode === 'function'
+  )
 }
 
 /** Ab so vielen Fehlversuchen in Folge gilt die Cam als "lost" und der Alarm geht los. */
@@ -128,11 +150,85 @@ export class CamTile {
     })
 
     this.el.append(this.video, this.label, this.badge, this.reason)
+    if (pipSupported(this.video)) this.el.append(this.pipButton())
     this.setState('connecting')
   }
 
   get id() { return this.cam.id }
   get muted() { return this.video.muted }
+
+  /** Soll diese Cam nach dem Start Ton haben? Ohne Angabe: ja. */
+  get wantsSound() { return this.cam.sound !== false }
+
+  // ── Bild-in-Bild ──────────────────────────────────────────────────
+
+  /**
+   * Der eigentliche Zweck bei einer Babycam: iOS spielt ein
+   * Bild-in-Bild-Fenster weiter, wenn die App in den Hintergrund geht.
+   * Ohne PiP ist der Stream weg, sobald man die App wegwischt.
+   *
+   * Ein Reconnect beendet das Fenster — `video.load()` beim Aufräumen
+   * lässt sich nicht vermeiden. Nach einem Aussetzer muss man PiP also
+   * neu anfordern.
+   */
+  private pipButton(): HTMLElement {
+    const b = document.createElement('button')
+    b.className = 'pip'
+    b.type = 'button'
+    b.title = 'Bild-in-Bild'
+    b.textContent = '⧉'
+    b.addEventListener('click', (e) => {
+      // Sonst schaltet der Klick zusätzlich das Vollbild der Kachel um.
+      e.stopPropagation()
+      void this.togglePip()
+    })
+    return b
+  }
+
+  private pipActive(): boolean {
+    return (
+      document.pictureInPictureElement === this.video ||
+      (this.video as any).webkitPresentationMode === 'picture-in-picture'
+    )
+  }
+
+  async togglePip() {
+    const v = this.video as any
+    try {
+      // Safaris eigener Weg zuerst: auf iOS gibt es nur diesen, und auf
+      // macOS ist er der ältere und verlässlichere.
+      if (typeof v.webkitSetPresentationMode === 'function') {
+        v.webkitSetPresentationMode(this.pipActive() ? 'inline' : 'picture-in-picture')
+        return
+      }
+      if (this.pipActive()) await document.exitPictureInPicture()
+      else await this.video.requestPictureInPicture()
+    } catch (err) {
+      // Kein Grund, die Kachel zu stören — aber im Verlauf soll es
+      // stehen. Häufigster Fall: noch kein Bild dekodiert.
+      this.note(`Bild-in-Bild nicht möglich: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  /**
+   * Ton einschalten, sofern für diese Cam vorgesehen.
+   *
+   * Meldet, ob der Browser mitgespielt hat. Ohne echte Nutzergeste
+   * lehnen alle Browser die Wiedergabe mit Ton ab — dann bleibt die
+   * Kachel stumm, statt gar nicht mehr zu laufen, und die Bedienleiste
+   * bietet den Knopf an.
+   */
+  async tryUnmute(): Promise<boolean> {
+    if (!this.wantsSound) return true
+    this.setMuted(false)
+    try {
+      await this.video.play()
+      return true
+    } catch {
+      this.setMuted(true)
+      return false
+    }
+  }
 
   /** Der Stream-Name in go2rtc — je nach Gerät HD oder Substream. */
   private get src(): string {

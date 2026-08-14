@@ -4,9 +4,11 @@
   "_go2rtc": "Leer lassen, wenn NPMplus /api an go2rtc weiterreicht (empfohlen: gleicher Origin, kein CORS). Sonst z.B. http://192.168.2.166:1984",
   "go2rtc": "",
 
+  "_sound": "Ton nach dem Start. Fehlt der Wert, gilt true — bei einem Babyfon ist Ton der Normalfall. Wer eine Cam stumm haben will, setzt hier false; das gilt ab dem nächsten Neuladen, ohne neuen Build.",
+
   "cams": [
-    { "id": "schlafzimmer", "name": "Schlafzimmer", "sd": "schlafzimmer_sd", "alarm": true },
-    { "id": "kinderzimmer", "name": "Kinderzimmer", "sd": "kinderzimmer_sd", "alarm": true },
-    { "id": "springer",     "name": "Springer",     "sd": "springer_sd",     "alarm": false }
+    { "id": "schlafzimmer", "name": "Schlafzimmer", "sd": "schlafzimmer_sd", "alarm": true, "sound": true },
+    { "id": "kinderzimmer", "name": "Kinderzimmer", "sd": "kinderzimmer_sd", "alarm": true, "sound": true },
+    { "id": "springer",     "name": "Springer",     "sd": "springer_sd",     "alarm": false, "sound": true }
   ]
 }
