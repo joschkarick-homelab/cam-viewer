@@ -409,8 +409,14 @@ ohnehin zwei weitere Dinge, die ohne Geste nirgends gehen: AudioContext
 entsperren (nötig für den Alarm) und Wake Lock anfordern. Läuft der Ton
 schon, heißt er nur noch „Bildschirm anlassen".
 
-Pro Kamera steht dann ein Schalter in der Leiste — **Ton lässt sich für
-beliebig viele Cams gleichzeitig anschalten**.
+Pro Kamera steht ein Schalter in der Leiste — **Ton lässt sich für
+beliebig viele Cams gleichzeitig anschalten**. Die Schalter sind immer
+da, auch wenn der Browser den Ton zunächst verweigert hat: ein Tap darauf
+ist selbst die Nutzergeste, die dafür fehlte.
+
+Jede Kachel zeigt ihren Zustand unten links neben dem Namen: 🔊 für Ton
+an, 🔇 für stumm. Beide Zustände werden angezeigt — „kein Symbol" wäre
+nicht von „diese Kachel kennt kein Tonsymbol" zu unterscheiden.
 
 Diese Schalter werden bewusst **nicht gemerkt**. Nach einem Neuladen gilt
 wieder, was in `cams.json` steht. Bei einem Babyfon ist das die sichere

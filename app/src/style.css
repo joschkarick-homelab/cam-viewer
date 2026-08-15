@@ -174,8 +174,17 @@ button.on {
   .tile[data-state="lost"], .badge::before { animation: none; }
 }
 
-/* Stummschaltung sichtbar machen */
+/* Tonzustand sichtbar machen — und zwar BEIDE Zustände.
+   Vorher stand hier nur das Symbol für "Ton an"; ohne Ton war schlicht
+   nichts zu sehen, und "aus" ließ sich nicht von "diese Kachel kennt gar
+   kein Tonsymbol" unterscheiden. Für das Durchgestrichene braucht es
+   keinen CSS-Trick: U+1F507 ist der Lautsprecher mit Strich. */
 .tile[data-muted="false"] .label::after { content: " 🔊"; }
+.tile[data-muted="true"]  .label::after { content: " 🔇"; }
+
+/* Stumm ist bei einem Babyfon der Zustand, den man bemerken soll —
+   also nicht wegdimmen, sondern nur leicht zurücknehmen. */
+.tile[data-muted="true"] .label::after { opacity: 0.75; }
 
 /* ── Bild-in-Bild ───────────────────────────────────────────────────
    Oben links, weil oben rechts das Statusabzeichen sitzt. Zurückhaltend
