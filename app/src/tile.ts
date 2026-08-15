@@ -151,10 +151,15 @@ export class CamTile {
 
     this.el.append(this.video, this.label, this.badge, this.reason)
     if (pipSupported(this.video)) this.el.append(this.pipButton())
+    // Nicht nur `video.muted` setzen, sondern über setMuted gehen: sonst
+    // fehlt `data-muted` bis zum ersten Umschalten, und die Kachel zeigt
+    // gar kein Tonsymbol — weder an noch aus.
+    this.setMuted(true)
     this.setState('connecting')
   }
 
   get id() { return this.cam.id }
+  get name() { return this.cam.name }
   get muted() { return this.video.muted }
 
   /** Soll diese Cam nach dem Start Ton haben? Ohne Angabe: ja. */
@@ -220,6 +225,21 @@ export class CamTile {
    */
   async tryUnmute(): Promise<boolean> {
     if (!this.wantsSound) return true
+    return this.unmute()
+  }
+
+  /**
+   * Ton an — auf ausdrücklichen Wunsch, unabhängig von `cams.json`.
+   *
+   * Getrennt von `tryUnmute()`, weil ein Tap auf den Schalter etwas
+   * anderes ist als der Standard beim Start: wer eine als `sound: false`
+   * konfigurierte Cam anschaltet, meint genau das.
+   *
+   * Das `play()` ist kein Beiwerk. Stummschaltung aufzuheben genügt
+   * nicht, wenn das Element zwischendurch pausiert wurde — und der Tap
+   * ist zugleich die Nutzergeste, die Browser für Ton verlangen.
+   */
+  async unmute(): Promise<boolean> {
     this.setMuted(false)
     try {
       await this.video.play()

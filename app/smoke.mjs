@@ -41,7 +41,9 @@ console.log(panel?.split('\n').slice(0, 26).join('\n'))
 console.log('...')
 const verlauf = panel?.split('-- Verlauf --')[1] ?? ''
 console.log('-- Verlauf --' + verlauf.split('\n').slice(0, 10).join('\n'))
-console.log('\n=== Kopierknopf:', await page.textContent('#bar button:last-of-type'))
+// Direktes Kind: seit die Ton-Schalter in der Leiste stehen, träfe
+// "#bar button" auch die aus dem .picker — und zwar zuerst.
+console.log('\n=== Kopierknopf:', await page.textContent('#bar > button:last-of-type'))
 
 // Bild-in-Bild: Chromium meldet Unterstützung, also muss je Kachel ein
 // Knopf im DOM stehen. Sichtbar ist er hier nicht — ohne Bild blendet
@@ -53,6 +55,16 @@ console.log('=== PiP-Knöpfe (erwartet 3):', await page.locator('.tile .pip').co
 // hängen — ein fehlgeschlagenes Entstummen darf nichts abreißen.
 console.log('=== Kacheln stumm (erwartet true):',
   await page.locator('video').evaluateAll((vs) => vs.every((v) => v.muted)))
+
+// Jede Kachel muss ihren Tonzustand anzeigen, auch den stummen. Fehlt
+// data-muted, zeigt die Kachel gar kein Symbol — der Fehler, den das
+// hier abfangen soll.
+console.log('=== data-muted gesetzt (erwartet 3x true):',
+  await page.locator('.tile').evaluateAll((ts) => ts.map((t) => t.dataset.muted)))
+
+// Die Schalter müssen da sein, AUCH wenn der Ton nicht angehen konnte —
+// sonst gibt es keinen Weg, ihn pro Kamera nachträglich anzuschalten.
+console.log('=== Ton-Schalter (erwartet 3):', await page.locator('.picker button').count())
 
 console.log('=== Unerwartete Fehler:', errors.filter(e => !e.includes('Failed to load resource') && !e.includes('WebSocket')).length)
 await browser.close()

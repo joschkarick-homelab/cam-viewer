@@ -115,8 +115,8 @@ async function main() {
   // Ton sofort versuchen. Klappt das (Desktop mit Media Engagement,
   // teils auch die installierte PWA), spart es den Tap; klappt es nicht,
   // bleibt alles stumm und der Knopf in der Leiste erledigt es später.
-  const results = await Promise.all(tiles.map((t) => t.tryUnmute()))
-  if (results.every(Boolean)) soundReady()
+  await Promise.all(tiles.map((t) => t.tryUnmute()))
+  showPicker()
 
   // Nach einem Suspend (Deckel zu, Tab weg) sind die Streams meist tot,
   // ohne dass ein Event feuert. Beim Zurückkommen prüfen wir aktiv nach.
@@ -139,9 +139,16 @@ function buildBar(transport: Transport, sd: boolean) {
   // läuft — Wake Lock gibt es ohne Geste nirgends.
   const start = button('🔊 Ton & Bildschirm an', async () => {
     unlockAudio()
+
+    // Reihenfolge ist hier entscheidend. Safari erklärt die Nutzergeste
+    // nach dem ersten `await` für verbraucht — stünde `keepScreenOn()`
+    // davor, käme das entscheidende `play()` zu spät und der Ton bliebe
+    // aus, obwohl getippt wurde. Deshalb erst anstoßen, dann warten.
+    const unmuting = Promise.all(tiles.map((t) => t.tryUnmute()))
     await keepScreenOn()
-    await Promise.all(tiles.map((t) => t.tryUnmute()))
-    soundReady()
+    await unmuting
+
+    showPicker()
     start.remove()
     startButton = null
   })
@@ -159,15 +166,22 @@ function buildBar(transport: Transport, sd: boolean) {
 }
 
 /**
- * Der Ton läuft — Schalter zeigen und den Knopf umbeschriften.
+ * Die Ton-Schalter zeigen — unabhängig davon, ob der Ton schon läuft.
  *
- * Getrennt vom Knopf selbst, weil der Ton auf zwei Wegen angehen kann:
- * durch den Tap oder gleich beim Start, wenn der Browser es zulässt.
+ * Vorher erschienen sie erst, wenn ALLE Kacheln erfolgreich entstummt
+ * waren. Schlug das bei einer fehl, gab es gar keine Schalter, und der
+ * Ton war für keine Kamera einzeln regelbar. Genau umgekehrt ist es
+ * richtig: die Schalter zeigen den echten Zustand, und über sie kommt
+ * man auch dann an den Ton, wenn der Browser ihn zunächst verweigert
+ * hat — ein Tap auf einen Schalter ist selbst die nötige Nutzergeste.
  */
-function soundReady() {
+function showPicker() {
   if (!bar.querySelector('.picker')) bar.prepend(soundPicker())
-  // Der Ton ist erledigt, der Bildschirm noch nicht.
-  if (startButton) startButton.textContent = '🔆 Bildschirm anlassen'
+  // Solange eine Kachel Ton will, ihn aber nicht hat, bleibt der Knopf
+  // das schnellste Mittel, alles auf einmal freizugeben.
+  if (startButton && !tiles.some((t) => t.wantsSound && t.muted)) {
+    startButton.textContent = '🔆 Bildschirm anlassen'
+  }
 }
 
 /**
@@ -189,8 +203,12 @@ function soundPicker(): HTMLElement {
   const wrap = document.createElement('div')
   wrap.className = 'picker'
   tiles.forEach((t) => {
-    const b = button(t.el.querySelector('.label')!.textContent!, () => {
-      t.setMuted(!t.muted)
+    const b = button(t.name, async () => {
+      if (t.muted) await t.unmute()
+      else t.setMuted(true)
+      // Erst nach dem await: lehnt der Browser den Ton ab, fällt die
+      // Kachel auf stumm zurück, und der Schalter muss das zeigen statt
+      // ein Anschalten zu behaupten, das nicht stattgefunden hat.
       b.classList.toggle('on', !t.muted)
     })
     b.classList.toggle('on', !t.muted)
