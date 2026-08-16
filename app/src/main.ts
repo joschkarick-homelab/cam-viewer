@@ -229,11 +229,52 @@ function button(text: string, onClick: () => void): HTMLButtonElement {
 
 // ── Vollbild ────────────────────────────────────────────────────────
 
+/**
+ * Eine Kachel groß — und zwar so groß, wie das Gerät hergibt.
+ *
+ * Zwei Stufen, weil nicht jedes Gerät beide kann:
+ *
+ * 1. **Fokus** (immer): alle anderen Kacheln raus, die Bedienleiste weg,
+ *    die verbleibende Kachel füllt die Seite.
+ * 2. **Echtes Vollbild** (wo vorhanden): zusätzlich `requestFullscreen()`
+ *    auf `#app`, was auch die Browserleisten verschwinden lässt.
+ *
+ * Vollbild wird bewusst auf `#app` angefordert und nicht auf die Kachel:
+ * so gelten die bestehenden Fokus-Regeln unverändert weiter, und vor
+ * allem bleiben Statusabzeichen und Ausgrauen erhalten. Auf dem iPhone
+ * gäbe es über `video.webkitEnterFullscreen()` zwar auch echtes
+ * Vollbild, aber nur im nativen Player — ohne Abzeichen und ohne
+ * Ausgrauen. Ein eingefrorenes Bild sähe dort aus wie ein Livebild, und
+ * genau das darf diese App nicht zulassen. Deshalb bleibt es auf dem
+ * iPhone bei Stufe 1, die im installierten Zustand ohnehin fast den
+ * ganzen Schirm füllt.
+ */
 function toggleFullscreen(tile: CamTile) {
-  const active = app.dataset.focus === tile.id
-  app.dataset.focus = active ? '' : tile.id
-  tiles.forEach((t) => t.el.classList.toggle('hidden', !active && t.id !== tile.id))
+  setFocus(app.dataset.focus === tile.id ? null : tile)
 }
+
+function setFocus(tile: CamTile | null) {
+  app.dataset.focus = tile?.id ?? ''
+  document.body.classList.toggle('focused', tile !== null)
+  tiles.forEach((t) => t.el.classList.toggle('hidden', tile !== null && t.id !== tile.id))
+
+  if (tile) {
+    // Nur versuchen, nicht erzwingen: ohne Unterstützung bleibt es bei
+    // Stufe 1, und das ist kein Fehlerfall.
+    if (document.fullscreenEnabled && !document.fullscreenElement) {
+      void app.requestFullscreen?.().catch(() => {})
+    }
+  } else if (document.fullscreenElement) {
+    void document.exitFullscreen().catch(() => {})
+  }
+}
+
+// Escape und die Wischgeste beenden das Vollbild am Browser vorbei. Ohne
+// das bliebe die App im Fokus hängen: eine Kachel sichtbar, zwei
+// versteckt, und die anderen beiden Kameras unbemerkt aus dem Blick.
+document.addEventListener('fullscreenchange', () => {
+  if (!document.fullscreenElement && app.dataset.focus) setFocus(null)
+})
 
 main().catch((err) => {
   bar.textContent = `Start fehlgeschlagen: ${err.message}`

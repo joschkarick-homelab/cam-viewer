@@ -83,6 +83,19 @@ button.on {
 #app:not([data-focus=""]) { grid-template-columns: 1fr; padding: 0; gap: 0; }
 .tile.hidden { display: none; }
 
+/* Auch die Bedienleiste weicht. Auf Geräten ohne Fullscreen-API — allen
+   voran das iPhone — ist das der Unterschied zwischen "große Kachel" und
+   "Vollbild". Zurück geht es per Tap auf die Kachel, wie hinein.
+
+   Die Randabstände für Notch und Home-Indicator bleiben: sie kosten
+   kaum Fläche, verhindern aber, dass Statusabzeichen und Name unter der
+   Aussparung verschwinden. Genau die sollen im Vollbild lesbar bleiben. */
+body.focused #bar { display: none; }
+
+/* Der Browser legt hinter das Vollbildelement eine eigene Fläche.
+   Ohne diese Zeile ist sie weiß und blitzt beim Umschalten auf. */
+#app:fullscreen { background: var(--bg); }
+
 .tile {
   position: relative;
   /* Standard, bis das erste Bild seine echten Maße meldet — tile.ts

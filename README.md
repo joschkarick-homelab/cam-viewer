@@ -392,8 +392,20 @@ echo '<PAT>' | docker login ghcr.io -u <github-user> --password-stdin
 
 ## Bedienung
 
-Tap auf eine Kachel → Vollbild. Der Knopf **⧉** oben links auf jeder
-Kachel schaltet Bild-in-Bild.
+Tap auf eine Kachel → Vollbild, nochmal tippen → zurück. Der Knopf **⧉**
+oben links auf jeder Kachel schaltet Bild-in-Bild.
+
+Vollbild hat zwei Stufen, je nachdem was das Gerät kann: die anderen
+Kacheln und die Bedienleiste verschwinden immer, und wo es die
+Fullscreen-API gibt, kommt `requestFullscreen()` auf `#app` dazu und
+räumt auch die Browserleisten weg.
+
+Angefordert wird das Vollbild bewusst für `#app` und nicht für das
+Video-Element. Auf dem iPhone gäbe es echtes Vollbild nur über
+`video.webkitEnterFullscreen()` — dann aber im nativen Player, ohne
+Statusabzeichen und **ohne Ausgrauen**. Ein eingefrorenes Bild sähe dort
+aus wie ein Livebild. Dafür ist die erste Stufe der bessere Handel; im
+installierten Zustand füllt sie ohnehin fast den ganzen Schirm.
 
 ### Ton
 
@@ -675,6 +687,44 @@ lität und Level aus der `avcC`-Box des Init-Segments und ersetzt den
 `avc1`-Teil, bevor der `SourceBuffer` entsteht. Der Audio-Teil bleibt
 unangetastet. Schlägt der korrigierte String fehl, wird go2rtcs
 ursprünglicher versucht.
+
+**Über MSE gibt es nur mit AAC Ton — und die Cams senden PCMA.** Das ist
+kein App-Fehler, sondern eine Eigenschaft der Kette, und der Grund dafür
+steht in go2rtcs Codec-Tabelle:
+
+| Transport | Audio-Codecs |
+|---|---|
+| WebRTC | PCMU, PCMA, OPUS |
+| MSE | AAC, FLAC |
+
+Tapo-Cams liefern über RTSP `PCMA` (G.711). Das ist für WebRTC ein
+Pflichtcodec — **im LAN läuft der Ton also einfach.** In einen
+MP4-Container passt PCMA aber nicht; go2rtc kann es nach FLAC
+umpacken, und genau da hört es auf: Safaris `ManagedMediaSource` nimmt
+FLAC nicht an. In der Diagnose ist das direkt ablesbar — `offeredCodecs`
+enthält kein `flac`, und in der Folge steht in `negotiatedCodecs` gar
+kein Audioteil. **Kein Audioteil heißt: es gibt keine Tonspur, die man
+lautstellen könnte.** Der Schalter geht dann an, ohne dass etwas zu hören
+ist.
+
+Der Ausweg liegt in go2rtc, nicht in der App: eine zweite Quelle je
+Stream, die den Ton nach AAC transkodiert.
+
+```yaml
+streams:
+  schlafzimmer:
+    - rtsp://admin:PASS@192.168.2.52:554/stream1
+    - ffmpeg:rtsp://admin:PASS@192.168.2.52:554/stream1#audio=aac
+```
+
+go2rtc sucht sich pro Client aus beiden Quellen die passenden Codecs
+zusammen („multi-source codec negotiation"): WebRTC nimmt weiter das
+unveränderte PCMA, MSE bekommt das AAC aus der zweiten Quelle. Der
+ffmpeg-Prozess startet nur, wenn ihn wirklich jemand braucht — dafür
+muss `ffmpeg` aber auf der VM installiert sein.
+
+Was die Kamera wirklich sendet, zeigt `curl http://<go2rtc>:1984/api/streams`.
+Steht dort bereits `AAC`, liegt es an etwas anderem.
 
 **Codecliste nicht erweitern.** `supportedCodecs()` in `transport.ts`
 entspricht Zeichen für Zeichen der Liste aus go2rtcs eigenem Player.

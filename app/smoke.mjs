@@ -66,5 +66,18 @@ console.log('=== data-muted gesetzt (erwartet 3x true):',
 // sonst gibt es keinen Weg, ihn pro Kamera nachträglich anzuschalten.
 console.log('=== Ton-Schalter (erwartet 3):', await page.locator('.picker button').count())
 
+// Fokus: Tap auf eine Kachel blendet die anderen und die Leiste aus,
+// ein zweiter Tap holt alles zurück. Echtes Vollbild lässt sich headless
+// nicht anfordern (keine Nutzergeste im Sinne des Browsers), Stufe 1
+// aber sehr wohl — und die trägt auf dem iPhone die ganze Funktion.
+await page.locator('.tile').first().click()
+console.log('=== Fokus aktiv:', await page.evaluate(() =>
+  document.body.classList.contains('focused') && document.getElementById('app').dataset.focus))
+console.log('=== Sichtbare Kacheln (erwartet 1):', await page.locator('.tile:not(.hidden)').count())
+console.log('=== Leiste sichtbar (erwartet false):', await page.locator('#bar').isVisible())
+
+await page.locator('.tile:not(.hidden)').first().click()
+console.log('=== Nach zweitem Tap sichtbar (erwartet 3):', await page.locator('.tile:not(.hidden)').count())
+
 console.log('=== Unerwartete Fehler:', errors.filter(e => !e.includes('Failed to load resource') && !e.includes('WebSocket')).length)
 await browser.close()
