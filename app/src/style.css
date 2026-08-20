@@ -79,8 +79,21 @@ button.on {
   min-height: 0;
 }
 
-/* Vollbild: eine Kachel füllt alles, der Rest ist ausgeblendet */
-#app:not([data-focus=""]) { grid-template-columns: 1fr; padding: 0; gap: 0; }
+/* Vollbild: eine Kachel füllt alles, der Rest ist ausgeblendet.
+
+   Bewusst flex statt Raster. Als Raster mit `align-content: start` stellte
+   sich die Zeile oben an und war nur so hoch wie ihr Inhalt — im Vollbild
+   klebte das Bild damit am oberen Rand und darunter blieb ein schwarzer
+   Streifen stehen. Flex mit zentrierter Ausrichtung stellt die Kachel
+   mittig und lässt sie den Platz füllen; das Letterboxing übernimmt
+   `object-fit: contain` im Video. */
+#app:not([data-focus=""]) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  gap: 0;
+}
 .tile.hidden { display: none; }
 
 /* Auch die Bedienleiste weicht. Auf Geräten ohne Fullscreen-API — allen
@@ -92,9 +105,36 @@ button.on {
    Aussparung verschwinden. Genau die sollen im Vollbild lesbar bleiben. */
 body.focused #bar { display: none; }
 
-/* Der Browser legt hinter das Vollbildelement eine eigene Fläche.
-   Ohne diese Zeile ist sie weiß und blitzt beim Umschalten auf. */
-#app:fullscreen { background: var(--bg); }
+/* Zwei Dinge auf einmal.
+
+   Erstens die Fläche hinter dem Vollbildelement: die legt der Browser
+   selbst an, und sie ist weiß, wenn man sie nicht setzt — sichtbar als
+   Aufblitzen beim Umschalten.
+
+   Zweitens, und wichtiger: `index.html` setzt
+   `apple-mobile-web-app-status-bar-style: black-translucent`. Die Seite
+   reicht damit absichtlich UNTER Statusleiste und Notch, und freigehalten
+   wird der Bereich allein durch das Polster auf <body>. Ein
+   Vollbildelement liegt außerhalb dieses Polsters — es wird aus dem
+   Layout gelöst und auf Bildschirmgröße gesetzt. Ohne die eigenen
+   Randabstände hier schiebt sich das Bild also unter die Statusleiste.
+
+   `env()` regelt sich dabei selbst: blendet das Gerät die Statusleiste im
+   Vollbild aus, ist der Wert null und es wird nichts freigehalten.
+
+   Zwei getrennte Regeln statt einer Liste: kennt ein Browser einen der
+   beiden Selektoren nicht, verwirft er sonst die GESAMTE Regel. */
+#app:fullscreen {
+  background: var(--bg);
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+           env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+#app:-webkit-full-screen {
+  background: var(--bg);
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+           env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
 
 .tile {
   position: relative;
@@ -110,6 +150,7 @@ body.focused #bar { display: none; }
 
 #app:not([data-focus=""]) .tile {
   aspect-ratio: auto;
+  width: 100%;
   height: 100%;
   border-radius: 0;
 }

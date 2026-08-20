@@ -76,6 +76,18 @@ console.log('=== Fokus aktiv:', await page.evaluate(() =>
 console.log('=== Sichtbare Kacheln (erwartet 1):', await page.locator('.tile:not(.hidden)').count())
 console.log('=== Leiste sichtbar (erwartet false):', await page.locator('#bar').isVisible())
 
+// Zentrierung: als Raster mit align-content:start klebte die Kachel im
+// Vollbild oben und ließ unten schwarz stehen.
+console.log('=== Fokus zentriert:', await page.evaluate(() => {
+  const s = getComputedStyle(document.getElementById('app'))
+  return `${s.display}/${s.alignItems}/${s.justifyContent}`
+}))
+console.log('=== Kachel füllt die Höhe:', await page.evaluate(() => {
+  const app = document.getElementById('app').getBoundingClientRect()
+  const tile = document.querySelector('.tile:not(.hidden)').getBoundingClientRect()
+  return Math.round(tile.height) === Math.round(app.height) && Math.round(tile.width) === Math.round(app.width)
+}))
+
 await page.locator('.tile:not(.hidden)').first().click()
 console.log('=== Nach zweitem Tap sichtbar (erwartet 3):', await page.locator('.tile:not(.hidden)').count())
 
