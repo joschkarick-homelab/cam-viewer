@@ -1,12 +1,21 @@
-/* Dunkel, ruhig, kontrastarm — das Ding steht nachts im Schlafzimmer.
+/* Dunkel, ruhig, aufgeräumt — das Ding steht nachts im Schlafzimmer.
    Die einzigen kräftigen Farben sind die Statusfarben, und die sollen
-   auch aus drei Metern Entfernung eindeutig sein. */
+   auch aus drei Metern Entfernung eindeutig sein.
+
+   Gestaltungsregeln, damit es aus einem Guss bleibt:
+   - Flächen: --bg (Seite) → --tile (Kachel) → --raised (Knöpfe)
+   - Eckenradius 10px für Bedienelemente, 12px für Kacheln
+   - Icons: nur die SVGs aus icons.ts, keine Emoji
+   - Trefferflächen mindestens 44px — mit schlafendem Kind auf dem Arm
+     trifft man kleinere Ziele nicht zuverlässig */
 
 :root {
-  --bg: #0b0d10;
-  --tile: #14171c;
-  --fg: #e8eaed;
-  --dim: #8a9199;
+  --bg: #0a0c0f;
+  --tile: #13161b;
+  --raised: #191e25;
+  --line: #262d37;
+  --fg: #e6e9ed;
+  --dim: #8a919b;
   --live: #34d17a;
   --warn: #f2b134;
   --dead: #ff4d4d;
@@ -32,6 +41,8 @@ body {
            env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
+svg { display: block; flex: none; }
+
 /* ── Bedienleiste ───────────────────────────────────────────────── */
 
 #bar {
@@ -39,33 +50,97 @@ body {
   gap: 8px;
   align-items: center;
   flex-wrap: wrap;
-  padding: 10px 12px;
-  border-bottom: 1px solid #1e232a;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  background: #0d1014;
 }
 
 #bar.error { color: var(--dead); }
 
 button {
-  background: #1e232a;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  background: var(--raised);
   color: var(--fg);
-  border: 1px solid #2a313a;
-  border-radius: 8px;
-  /* 44px Mindesthöhe — mit schlafendem Kind auf dem Arm trifft man
-     kleinere Ziele nicht zuverlässig. */
+  border: 1px solid var(--line);
+  border-radius: 10px;
   min-height: 44px;
   padding: 0 14px;
   font: inherit;
+  font-size: 14px;
   cursor: pointer;
 }
 
-button.on {
-  background: #23402f;
-  border-color: var(--live);
-  color: var(--live);
+button:active { background: #222933; }
+
+button:focus-visible {
+  outline: 2px solid var(--dim);
+  outline-offset: 2px;
 }
 
+/* Der eine Knopf, der beim Einrichten zählt, darf hervorstechen —
+   gedeckt grün statt leuchtend, es ist nachts. */
+button.primary {
+  background: #17251e;
+  border-color: #2c4a3a;
+  color: #8fe0b2;
+}
+
+.info {
+  margin-left: auto;
+  color: var(--dim);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+/* ── Kamera-Chips ───────────────────────────────────────────────────
+   Ein Chip je Kamera: Name mit Tonsymbol (Tap = Ton an/aus), daneben
+   ein schmales ✕ zum Ausblenden. Beide Teile teilen sich eine Pille,
+   damit sie als EIN Ding lesbar sind. */
+
 .picker { display: flex; gap: 6px; flex-wrap: wrap; }
-.info { margin-left: auto; color: var(--dim); font-size: 13px; }
+
+.chip {
+  display: inline-flex;
+  align-items: stretch;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.chip button {
+  background: none;
+  border: none;
+  border-radius: 0;
+  min-height: 42px;
+}
+
+.chip .snd { padding: 0 6px 0 14px; color: var(--dim); }
+.chip .hide {
+  padding: 0 10px;
+  color: var(--dim);
+  border-left: 1px solid var(--line);
+}
+
+.chip .hide:active, .chip .snd:active { background: #222933; }
+
+/* Ton an: der ganze Chip kippt ins Grün, nicht nur ein Detail —
+   der Blick aus der Entfernung soll genügen. */
+.chip.on { border-color: #2c4a3a; background: #17251e; }
+.chip.on .snd { color: var(--live); }
+.chip.on .hide { border-left-color: #2c4a3a; }
+
+/* Ausgeblendete Kamera: bewusst sichtbarer, gedämpfter Chip.
+   Sie wird NICHT überwacht — spurlos verschwinden darf sie nicht. */
+button.chip.ghost {
+  border-radius: 999px;
+  border-style: dashed;
+  color: var(--dim);
+  background: none;
+}
 
 /* ── Kachelraster ───────────────────────────────────────────────── */
 
@@ -74,19 +149,20 @@ button.on {
   display: grid;
   gap: 8px;
   padding: 8px;
+  /* Startwert, bis layoutGrid() in main.ts die Spalten aus Fensterform
+     und Bildmaßen rechnet — es zentriert die Kacheln und wählt z.B. auf
+     dem Tablet quer 2+1 statt drei Winzlingen in einer Reihe. */
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  align-content: start;
+  justify-content: center;
+  align-content: center;
   min-height: 0;
 }
 
 /* Vollbild: eine Kachel füllt alles, der Rest ist ausgeblendet.
 
-   Bewusst flex statt Raster. Als Raster mit `align-content: start` stellte
-   sich die Zeile oben an und war nur so hoch wie ihr Inhalt — im Vollbild
-   klebte das Bild damit am oberen Rand und darunter blieb ein schwarzer
-   Streifen stehen. Flex mit zentrierter Ausrichtung stellt die Kachel
-   mittig und lässt sie den Platz füllen; das Letterboxing übernimmt
-   `object-fit: contain` im Video. */
+   Bewusst flex statt Raster: als Raster war die Zeile nur inhaltshoch,
+   die Kachel klebte oben und darunter blieb ein schwarzer Streifen.
+   Das Letterboxing übernimmt object-fit: contain im Video. */
 #app:not([data-focus=""]) {
   display: flex;
   align-items: center;
@@ -94,15 +170,16 @@ button.on {
   padding: 0;
   gap: 0;
 }
+
 .tile.hidden { display: none; }
 
-/* Auch die Bedienleiste weicht. Auf Geräten ohne Fullscreen-API — allen
-   voran das iPhone — ist das der Unterschied zwischen "große Kachel" und
-   "Vollbild". Zurück geht es per Tap auf die Kachel, wie hinein.
+/* Ausgeblendete Kamera (Chip in der Leiste holt sie zurück) */
+.tile.off { display: none; }
 
-   Die Randabstände für Notch und Home-Indicator bleiben: sie kosten
-   kaum Fläche, verhindern aber, dass Statusabzeichen und Name unter der
-   Aussparung verschwinden. Genau die sollen im Vollbild lesbar bleiben. */
+/* Auch die Bedienleiste weicht im Vollbild. Auf Geräten ohne
+   Fullscreen-API — allen voran das iPhone — ist das der Unterschied
+   zwischen "große Kachel" und "Vollbild". Zurück per Tap auf die
+   Kachel, wie hinein. */
 body.focused #bar { display: none; }
 
 /* Zwei Dinge auf einmal.
@@ -111,16 +188,12 @@ body.focused #bar { display: none; }
    selbst an, und sie ist weiß, wenn man sie nicht setzt — sichtbar als
    Aufblitzen beim Umschalten.
 
-   Zweitens, und wichtiger: `index.html` setzt
-   `apple-mobile-web-app-status-bar-style: black-translucent`. Die Seite
-   reicht damit absichtlich UNTER Statusleiste und Notch, und freigehalten
-   wird der Bereich allein durch das Polster auf <body>. Ein
-   Vollbildelement liegt außerhalb dieses Polsters — es wird aus dem
-   Layout gelöst und auf Bildschirmgröße gesetzt. Ohne die eigenen
-   Randabstände hier schiebt sich das Bild also unter die Statusleiste.
-
-   `env()` regelt sich dabei selbst: blendet das Gerät die Statusleiste im
-   Vollbild aus, ist der Wert null und es wird nichts freigehalten.
+   Zweitens: index.html setzt black-translucent, die Seite reicht also
+   absichtlich UNTER Statusleiste und Notch. Freigehalten wird der
+   Bereich allein durch das Polster auf <body> — und ein Vollbildelement
+   liegt außerhalb davon. Ohne eigene Randabstände hier schiebt sich das
+   Bild unter die Statusleiste. env() regelt sich selbst: blendet das
+   Gerät die Leiste aus, ist der Wert null.
 
    Zwei getrennte Regeln statt einer Liste: kennt ein Browser einen der
    beiden Selektoren nicht, verwirft er sonst die GESAMTE Regel. */
@@ -142,9 +215,9 @@ body.focused #bar { display: none; }
      setzt dann --ar. Ohne Startwert klappt die Kachel auf 0 zusammen. */
   aspect-ratio: var(--ar, 16 / 9);
   background: var(--tile);
-  border-radius: 10px;
+  border-radius: 12px;
   overflow: hidden;
-  border: 2px solid transparent;
+  border: 2px solid #1c222b;
   cursor: pointer;
 }
 
@@ -153,6 +226,7 @@ body.focused #bar { display: none; }
   width: 100%;
   height: 100%;
   border-radius: 0;
+  border-color: transparent;
 }
 
 .tile video {
@@ -169,10 +243,17 @@ body.focused #bar { display: none; }
   position: absolute;
   left: 10px;
   bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 13px;
+  font-weight: 500;
   text-shadow: 0 1px 3px #000;
   pointer-events: none;
 }
+
+.label svg { filter: drop-shadow(0 1px 2px #000); }
+.tile[data-muted="true"] .label svg { opacity: 0.7; }
 
 .badge {
   position: absolute;
@@ -181,10 +262,11 @@ body.focused #bar { display: none; }
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 9px;
+  padding: 4px 10px;
   border-radius: 999px;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
   background: #000a;
   backdrop-filter: blur(4px);
   pointer-events: none;
@@ -192,8 +274,8 @@ body.focused #bar { display: none; }
 
 .badge::before {
   content: "";
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: currentColor;
 }
@@ -228,23 +310,9 @@ body.focused #bar { display: none; }
   .tile[data-state="lost"], .badge::before { animation: none; }
 }
 
-/* Tonzustand sichtbar machen — und zwar BEIDE Zustände.
-   Vorher stand hier nur das Symbol für "Ton an"; ohne Ton war schlicht
-   nichts zu sehen, und "aus" ließ sich nicht von "diese Kachel kennt gar
-   kein Tonsymbol" unterscheiden. Für das Durchgestrichene braucht es
-   keinen CSS-Trick: U+1F507 ist der Lautsprecher mit Strich. */
-.tile[data-muted="false"] .label::after { content: " 🔊"; }
-.tile[data-muted="true"]  .label::after { content: " 🔇"; }
-
-/* Stumm ist bei einem Babyfon der Zustand, den man bemerken soll —
-   also nicht wegdimmen, sondern nur leicht zurücknehmen. */
-.tile[data-muted="true"] .label::after { opacity: 0.75; }
-
 /* ── Bild-in-Bild ───────────────────────────────────────────────────
    Oben links, weil oben rechts das Statusabzeichen sitzt. Zurückhaltend
-   gehalten: das Ding steht nachts im Schlafzimmer und soll nicht
-   leuchten, aber mit müden Augen und Kind auf dem Arm noch treffbar
-   sein — daher trotz kleinem Symbol die vollen 44 px. */
+   gehalten, aber mit vollen 44px Trefferfläche. */
 
 .pip {
   position: absolute;
@@ -253,13 +321,12 @@ body.focused #bar { display: none; }
   min-height: 44px;
   min-width: 44px;
   padding: 0;
-  font-size: 17px;
-  line-height: 1;
   background: #000a;
-  border-color: #ffffff26;
+  border: 1px solid #ffffff22;
+  border-radius: 50%;
   color: var(--dim);
   backdrop-filter: blur(4px);
-  opacity: 0.55;
+  opacity: 0.6;
 }
 
 .pip:hover, .pip:focus-visible { opacity: 1; color: var(--fg); }
@@ -268,14 +335,16 @@ body.focused #bar { display: none; }
 .tile[data-state="connecting"] .pip,
 .tile[data-state="lost"] .pip { display: none; }
 
-/* Fehlergrund — nur sichtbar, wenn die Kachel ohnehin nicht live ist.
-   Auf dem Fire Tablet gibt es keine Konsole; ohne diese Zeile stünde
-   dort nur "Verbindung weg" ohne jeden Anhaltspunkt. */
+/* ── Fehlergrund ────────────────────────────────────────────────────
+   Nur sichtbar, wenn die Kachel ohnehin nicht live ist. Auf dem Fire
+   Tablet gibt es keine Konsole; ohne diese Zeile stünde dort nur
+   "Verbindung weg" ohne jeden Anhaltspunkt. */
+
 .reason {
   position: absolute;
   left: 10px;
   right: 10px;
-  bottom: 26px;
+  bottom: 28px;
   font-size: 11px;
   color: var(--dim);
   text-shadow: 0 1px 3px #000;
@@ -306,7 +375,7 @@ body.focused #bar { display: none; }
   font: 11px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
   white-space: pre-wrap;
   word-break: break-word;
-  border-top: 1px solid #2a313a;
+  border-top: 1px solid var(--line);
   z-index: 10;
 }
 
