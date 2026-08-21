@@ -62,9 +62,29 @@ console.log('=== Kacheln stumm (erwartet true):',
 console.log('=== data-muted gesetzt (erwartet 3x true):',
   await page.locator('.tile').evaluateAll((ts) => ts.map((t) => t.dataset.muted)))
 
-// Die Schalter müssen da sein, AUCH wenn der Ton nicht angehen konnte —
+// Die Chips müssen da sein, AUCH wenn der Ton nicht angehen konnte —
 // sonst gibt es keinen Weg, ihn pro Kamera nachträglich anzuschalten.
-console.log('=== Ton-Schalter (erwartet 3):', await page.locator('.picker button').count())
+// Genau das war der Fire-Tablet-Fehler: eine tote Kamera ließ play()
+// ewig hängen, das await kam nie zurück, keine Schalter, "passiert nix".
+console.log('=== Kamera-Chips (erwartet 3):', await page.locator('.picker .chip').count())
+
+// Ausblenden: ✕ am ersten Chip → Kachel weg, Geister-Chip da.
+// Wieder einblenden → alles zurück. Persistenz läuft über localStorage,
+// der Rücktausch räumt sie hier gleich wieder auf.
+await page.locator('.picker .chip .hide').first().click()
+console.log('=== Nach Ausblenden sichtbar (erwartet 2):',
+  await page.locator('.tile:not(.off)').count())
+console.log('=== Geister-Chip (erwartet 1):', await page.locator('.picker .ghost').count())
+await page.locator('.picker .ghost').click()
+console.log('=== Nach Einblenden sichtbar (erwartet 3):',
+  await page.locator('.tile:not(.off)').count())
+
+// Das Raster rechnet seine Spalten selbst — Kacheln zentriert, Breite
+// in Pixeln statt auto-fit. Headless ist das Fenster 1280x720: quer,
+// drei Kacheln → 2+1 wäre bei vollem Platz richtig; hier zählt nur,
+// dass überhaupt gerechnete Pixelspalten stehen.
+console.log('=== Raster gerechnet:', await page.evaluate(() =>
+  /^repeat\(\d+, \d+px\)$/.test(document.getElementById('app').style.gridTemplateColumns)))
 
 // Fokus: Tap auf eine Kachel blendet die anderen und die Leiste aus,
 // ein zweiter Tap holt alles zurück. Echtes Vollbild lässt sich headless

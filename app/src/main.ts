@@ -2,6 +2,7 @@ import { CamTile, type CamConfig } from './tile'
 import type { Transport } from './transport'
 import { mseSupported } from './transport'
 import { keepScreenOn, wakeLockSupported, unlockAudio, stopAlarm } from './keepalive'
+import { icon } from './icons'
 import './style.css'
 
 interface AppConfig {
@@ -85,6 +86,44 @@ function debugEnabled(): boolean {
 
 // ── Start ───────────────────────────────────────────────────────────
 
+// ── Ausgeblendete Kameras ───────────────────────────────────────────
+//
+// Pro GERÄT gemerkt, nicht global: das Fire Tablet im Flur braucht den
+// selten genutzten Springer nicht, das iPhone vielleicht schon.
+//
+// Wichtig fürs Gewissen: eine ausgeblendete Kamera wird NICHT überwacht
+// — keine Verbindung, kein Watchdog, kein Alarm. Deshalb bleibt sie in
+// der Leiste als Chip sichtbar, statt spurlos zu verschwinden.
+
+const hiddenIds = new Set<string>(readHidden())
+
+function readHidden(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem('hiddenCams') ?? '[]')
+    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function isHidden(t: CamTile): boolean {
+  return hiddenIds.has(t.id)
+}
+
+function setHidden(t: CamTile, hidden: boolean) {
+  if (hidden) hiddenIds.add(t.id)
+  else hiddenIds.delete(t.id)
+  try {
+    localStorage.setItem('hiddenCams', JSON.stringify([...hiddenIds]))
+  } catch { /* ohne Speicher gilt es eben nur bis zum Neuladen */ }
+
+  t.el.classList.toggle('off', hidden)
+  if (hidden) t.suspend()
+  else void t.connect()
+  renderPicker()
+  layoutGrid()
+}
+
 async function main() {
   const cfg: AppConfig = await fetch('cams.json', { cache: 'no-cache' }).then((r) => r.json())
   const transport = pickTransport()
@@ -93,6 +132,7 @@ async function main() {
 
   tiles = cfg.cams.map((cam) => new CamTile(cam, base, transport, sd))
   tiles.forEach((t) => {
+    t.el.classList.toggle('off', isHidden(t))
     app.append(t.el)
     t.el.addEventListener('click', () => toggleFullscreen(t))
   })
@@ -104,31 +144,125 @@ async function main() {
     void import('./diagnostics').then((d) => d.mountDebugPanel(bar, tiles))
   }
 
-  // Alarm zentral verwalten: er verstummt erst, wenn KEINE Kachel mehr
-  // im Zustand "lost" ist. Einzelne Kacheln können das nicht entscheiden.
+  // Alarm zentral verwalten: er verstummt erst, wenn KEINE sichtbare
+  // Kachel mehr "lost" ist. Ausgeblendete zählen nicht — sie sind
+  // absichtlich unbeobachtet, und das zeigt ihr Chip in der Leiste.
   app.addEventListener('tilestate', () => {
-    if (!tiles.some((t) => t.isLost())) stopAlarm()
+    if (!tiles.some((t) => !isHidden(t) && t.isLost())) stopAlarm()
   })
+  // Zustandsänderungen von außen (Hintergrund-Stummschaltung, spät
+  // abgelehnter Ton) in den Schaltern nachziehen.
+  app.addEventListener('tilemuted', renderPicker)
 
-  await Promise.all(tiles.map((t) => t.connect()))
+  // Das Raster passt sich den echten Bildmaßen und der Fensterform an.
+  app.addEventListener('tileaspect', layoutGrid)
+  window.addEventListener('resize', layoutGrid)
+  layoutGrid()
+
+  await Promise.all(tiles.filter((t) => !isHidden(t)).map((t) => t.connect()))
 
   // Ton sofort versuchen. Klappt das (Desktop mit Media Engagement,
   // teils auch die installierte PWA), spart es den Tap; klappt es nicht,
   // bleibt alles stumm und der Knopf in der Leiste erledigt es später.
-  await Promise.all(tiles.map((t) => t.tryUnmute()))
-  showPicker()
+  await Promise.all(tiles.filter((t) => !isHidden(t)).map((t) => t.tryUnmute()))
+  renderPicker()
+  updateStartButton()
 
-  // Nach einem Suspend (Deckel zu, Tab weg) sind die Streams meist tot,
-  // ohne dass ein Event feuert. Beim Zurückkommen prüfen wir aktiv nach.
+  watchVisibility()
+}
+
+// ── Sichtbarkeit ────────────────────────────────────────────────────
+
+/**
+ * Der Ton folgt der Sichtbarkeit: App im Hintergrund → stumm, App
+ * wieder vorn → der vorherige Zustand kommt zurück.
+ *
+ * Anlass war das Fire Tablet, auf dem der Ton nach dem Verlassen der
+ * App einfach weiterlief — unsichtbar und damit unauffindbar. Wer
+ * bewusst WEITERHÖREN will, nimmt Bild-in-Bild: ein PiP-Fenster ist
+ * sichtbar, und seine Kachel wird deshalb ausdrücklich nicht angefasst.
+ *
+ * Beim Zurückkommen werden außerdem tote Streams neu verbunden: nach
+ * einem Suspend (Deckel zu, Tab weg) sind sie meist hin, ohne dass ein
+ * Ereignis feuert.
+ */
+function watchVisibility() {
+  const mutedInBackground = new Set<CamTile>()
+
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible') return
-    tiles.filter((t) => t.isLost()).forEach((t) => void t.connect())
+    if (document.visibilityState === 'hidden') {
+      tiles.forEach((t) => {
+        if (!t.muted && !t.pipActive()) {
+          t.setMuted(true)
+          mutedInBackground.add(t)
+        }
+      })
+      return
+    }
+
+    const restore = [...mutedInBackground]
+    mutedInBackground.clear()
+    restore.forEach((t) => void t.unmute())
+    tiles.filter((t) => !isHidden(t) && t.isLost()).forEach((t) => void t.connect())
   })
+}
+
+// ── Kachelraster ────────────────────────────────────────────────────
+
+/**
+ * Spaltenzahl so wählen, dass die Kacheln den Platz maximal nutzen.
+ *
+ * `auto-fit` mit fester Mindestbreite hat das nicht geschafft: auf dem
+ * Fire Tablet quer standen drei winzige Kacheln in einer Reihe über
+ * einem leeren Rest — bei drei Kameras ist dort 2+1 die richtige
+ * Aufteilung. Die lässt sich nicht deklarativ hinschreiben, also wird
+ * gerechnet: für jede Spaltenzahl die mögliche Kachelbreite bestimmen
+ * (begrenzt durch Breite UND Höhe), die beste gewinnt.
+ *
+ * Beim schmalsten Seitenverhältnis begrenzt die HÖHE die Breite — das
+ * höchste Bild bestimmt die Zeilenhöhe, deshalb rechnet die Schranke
+ * mit dem kleinsten Verhältnis aller sichtbaren Kacheln.
+ */
+function layoutGrid() {
+  if (app.dataset.focus) return
+  const visible = tiles.filter((t) => !isHidden(t))
+  if (visible.length === 0) {
+    app.style.gridTemplateColumns = ''
+    return
+  }
+
+  const gap = 8
+  const w = app.clientWidth - 16
+  const h = app.clientHeight - 16
+  if (w <= 0 || h <= 0) return
+
+  const ar = Math.min(...visible.map((t) => t.aspect))
+  let best = { cols: 1, width: 0 }
+  for (let cols = 1; cols <= visible.length; cols++) {
+    const rows = Math.ceil(visible.length / cols)
+    const byWidth = (w - (cols - 1) * gap) / cols
+    const byHeight = ((h - (rows - 1) * gap) / rows) * ar
+    const width = Math.min(byWidth, byHeight)
+    if (width > best.width) best = { cols, width }
+  }
+
+  app.style.gridTemplateColumns = `repeat(${best.cols}, ${Math.floor(best.width)}px)`
 }
 
 // ── Bedienleiste ────────────────────────────────────────────────────
 
 let startButton: HTMLButtonElement | null = null
+
+function button(html: string, onClick: () => void): HTMLButtonElement {
+  const b = document.createElement('button')
+  b.type = 'button'
+  b.innerHTML = html
+  b.addEventListener('click', (e) => {
+    e.stopPropagation()
+    onClick()
+  })
+  return b
+}
 
 function buildBar(transport: Transport, sd: boolean) {
   // Ein einziger Tap, der drei Dinge gleichzeitig erledigt: AudioContext
@@ -137,22 +271,32 @@ function buildBar(transport: Transport, sd: boolean) {
   //
   // Der Knopf bleibt auch dann nötig, wenn der Ton schon von selbst
   // läuft — Wake Lock gibt es ohne Geste nirgends.
-  const start = button('🔊 Ton & Bildschirm an', async () => {
-    unlockAudio()
+  const start = button(`${icon('sound')}<span>Ton & Bildschirm an</span>`, async () => {
+    try {
+      unlockAudio()
 
-    // Reihenfolge ist hier entscheidend. Safari erklärt die Nutzergeste
-    // nach dem ersten `await` für verbraucht — stünde `keepScreenOn()`
-    // davor, käme das entscheidende `play()` zu spät und der Ton bliebe
-    // aus, obwohl getippt wurde. Deshalb erst anstoßen, dann warten.
-    const unmuting = Promise.all(tiles.map((t) => t.tryUnmute()))
-    await keepScreenOn()
-    await unmuting
-
-    showPicker()
-    start.remove()
-    startButton = null
+      // Reihenfolge ist hier entscheidend. Safari erklärt die Nutzergeste
+      // nach dem ersten `await` für verbraucht — stünde `keepScreenOn()`
+      // davor, käme das entscheidende `play()` zu spät und der Ton bliebe
+      // aus, obwohl getippt wurde. Deshalb erst anstoßen, dann warten.
+      const unmuting = Promise.all(
+        tiles.filter((t) => !isHidden(t)).map((t) => t.tryUnmute()),
+      )
+      await keepScreenOn()
+      await unmuting
+    } finally {
+      // Auch wenn oben etwas schiefgeht: die Leiste MUSS reagieren.
+      // Auf dem Fire Tablet hing genau hier alles — ein Tap ohne jede
+      // sichtbare Folge ist schlimmer als eine halbe Fehlermeldung.
+      renderPicker()
+      updateStartButton()
+    }
   })
+  start.classList.add('primary')
   startButton = start
+
+  const picker = document.createElement('div')
+  picker.className = 'picker'
 
   const info = document.createElement('span')
   info.className = 'info'
@@ -162,69 +306,73 @@ function buildBar(transport: Transport, sd: boolean) {
     wakeLockSupported ? null : 'kein Wake Lock',
   ].filter(Boolean).join(' · ')
 
-  bar.append(start, info)
+  bar.append(picker, start, info)
+  renderPicker()
 }
 
 /**
- * Die Ton-Schalter zeigen — unabhängig davon, ob der Ton schon läuft.
- *
- * Vorher erschienen sie erst, wenn ALLE Kacheln erfolgreich entstummt
- * waren. Schlug das bei einer fehl, gab es gar keine Schalter, und der
- * Ton war für keine Kamera einzeln regelbar. Genau umgekehrt ist es
- * richtig: die Schalter zeigen den echten Zustand, und über sie kommt
- * man auch dann an den Ton, wenn der Browser ihn zunächst verweigert
- * hat — ein Tap auf einen Schalter ist selbst die nötige Nutzergeste.
+ * Läuft überall Ton, wo er laufen soll, schrumpft der Startknopf auf
+ * seine verbleibende Aufgabe zusammen: den Bildschirm wachhalten.
  */
-function showPicker() {
-  if (!bar.querySelector('.picker')) bar.prepend(soundPicker())
-  // Solange eine Kachel Ton will, ihn aber nicht hat, bleibt der Knopf
-  // das schnellste Mittel, alles auf einmal freizugeben.
-  if (startButton && !tiles.some((t) => t.wantsSound && t.muted)) {
-    startButton.textContent = '🔆 Bildschirm anlassen'
-  }
+function updateStartButton() {
+  if (!startButton) return
+  const soundDone = !tiles.some((t) => !isHidden(t) && t.wantsSound && t.muted)
+  if (soundDone) startButton.innerHTML = `${icon('screen')}<span>Bildschirm anlassen</span>`
 }
 
 /**
- * Ton pro Kamera einzeln schaltbar.
+ * Ein Chip je Kamera: Name mit Tonsymbol (Tap = Ton an/aus) und daneben
+ * ein schmales ✕ zum Ausblenden. Ausgeblendete Kameras bleiben als
+ * gedämpfter Chip mit + stehen — bewusst sichtbar, denn eine
+ * ausgeblendete Kamera wird nicht überwacht, und das darf niemand
+ * vergessen, der auf die Leiste schaut.
  *
- * Ursprünglich war das eine Auswahl — genau eine Cam mit Ton, weil drei
- * gleichzeitig nur Matsch ergeben. Für eine Babycam ist das aber zu
- * eng: zwei Kinderzimmer gleichzeitig zu hören ist der eigentliche
- * Zweck. Ob drei Streams sinnvoll sind, entscheidet der Mensch davor —
- * und was beim Start anliegt, steht als `sound` in `cams.json`.
+ * Die Schalter zeigen immer den ECHTEN Zustand: sie werden nach jedem
+ * tilemuted-Ereignis neu aufgebaut, statt sich Klicks zu merken. Ein
+ * Tap auf einen Chip ist zugleich die Nutzergeste, die der Browser für
+ * den Ton verlangt — deshalb sind die Chips auch dann da, wenn die
+ * automatische Freigabe beim Start abgelehnt wurde.
  *
- * Die Schalter werden bewusst NICHT gemerkt. Nach einem Neuladen gilt
- * wieder, was in `cams.json` steht. Bei einem Babyfon ist das die
- * sichere Richtung: ein versehentlich stumm gebliebener Kanal darf nicht
- * über Tage hinweg stumm bleiben, nur weil ihn einmal jemand ausgemacht
- * hat.
+ * Tonzustand wird bewusst NICHT gemerkt (nach Neuladen gilt cams.json),
+ * die Ausblendung schon — Ersteres ist eine Sicherheits-, Letzteres
+ * eine Geräteentscheidung.
  */
-function soundPicker(): HTMLElement {
-  const wrap = document.createElement('div')
-  wrap.className = 'picker'
+function renderPicker() {
+  const wrap = bar.querySelector('.picker')
+  if (!wrap) return
+  wrap.replaceChildren()
+
   tiles.forEach((t) => {
-    const b = button(t.name, async () => {
-      if (t.muted) await t.unmute()
-      else t.setMuted(true)
-      // Erst nach dem await: lehnt der Browser den Ton ab, fällt die
-      // Kachel auf stumm zurück, und der Schalter muss das zeigen statt
-      // ein Anschalten zu behaupten, das nicht stattgefunden hat.
-      b.classList.toggle('on', !t.muted)
-    })
-    b.classList.toggle('on', !t.muted)
-    wrap.append(b)
-  })
-  return wrap
-}
+    if (isHidden(t)) {
+      const b = button(`${icon('show')}<span>${t.name}</span>`, () => setHidden(t, false))
+      b.className = 'chip ghost'
+      b.title = `${t.name} einblenden`
+      wrap.append(b)
+      return
+    }
 
-function button(text: string, onClick: () => void): HTMLButtonElement {
-  const b = document.createElement('button')
-  b.textContent = text
-  b.addEventListener('click', (e) => {
-    e.stopPropagation()
-    onClick()
+    const chip = document.createElement('div')
+    chip.className = 'chip'
+    chip.classList.toggle('on', !t.muted)
+
+    const snd = button(
+      `${icon(t.muted ? 'muted' : 'sound')}<span>${t.name}</span>`,
+      async () => {
+        if (t.muted) await t.unmute()
+        else t.setMuted(true)
+        renderPicker()
+      },
+    )
+    snd.className = 'snd'
+    snd.title = t.muted ? `Ton für ${t.name} einschalten` : `Ton für ${t.name} ausschalten`
+
+    const hide = button(icon('hide'), () => setHidden(t, true))
+    hide.className = 'hide'
+    hide.title = `${t.name} ausblenden`
+
+    chip.append(snd, hide)
+    wrap.append(chip)
   })
-  return b
 }
 
 // ── Vollbild ────────────────────────────────────────────────────────
@@ -257,6 +405,9 @@ function setFocus(tile: CamTile | null) {
   app.dataset.focus = tile?.id ?? ''
   document.body.classList.toggle('focused', tile !== null)
   tiles.forEach((t) => t.el.classList.toggle('hidden', tile !== null && t.id !== tile.id))
+  // Zurück im Raster: die Spalten neu rechnen, die Fensterform kann
+  // sich im Vollbild geändert haben (Drehung, Browserleisten).
+  if (!tile) layoutGrid()
 
   if (tile) {
     // Nur versuchen, nicht erzwingen: ohne Unterstützung bleibt es bei

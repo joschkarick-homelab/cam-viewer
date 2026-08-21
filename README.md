@@ -392,8 +392,14 @@ echo '<PAT>' | docker login ghcr.io -u <github-user> --password-stdin
 
 ## Bedienung
 
-Tap auf eine Kachel → Vollbild, nochmal tippen → zurück. Der Knopf **⧉**
-oben links auf jeder Kachel schaltet Bild-in-Bild.
+Tap auf eine Kachel → Vollbild, nochmal tippen → zurück. Der Knopf oben
+links auf jeder Kachel schaltet Bild-in-Bild.
+
+Das Raster rechnet seine Aufteilung selbst: aus Fensterform und den
+echten Bildmaßen wird die Spaltenzahl gewählt, die den Kacheln am
+meisten Fläche gibt, und das Ganze zentriert. Auf einem Tablet quer
+heißt das bei drei Kameras 2+1 statt drei Winzlingen in einer Reihe —
+`auto-fit` mit fester Mindestbreite konnte das nicht.
 
 Vollbild hat zwei Stufen, je nachdem was das Gerät kann: die anderen
 Kacheln und die Bedienleiste verschwinden immer, und wo es die
@@ -421,19 +427,42 @@ ohnehin zwei weitere Dinge, die ohne Geste nirgends gehen: AudioContext
 entsperren (nötig für den Alarm) und Wake Lock anfordern. Läuft der Ton
 schon, heißt er nur noch „Bildschirm anlassen".
 
-Pro Kamera steht ein Schalter in der Leiste — **Ton lässt sich für
-beliebig viele Cams gleichzeitig anschalten**. Die Schalter sind immer
-da, auch wenn der Browser den Ton zunächst verweigert hat: ein Tap darauf
-ist selbst die Nutzergeste, die dafür fehlte.
+Pro Kamera steht ein Chip in der Leiste — **Ton lässt sich für beliebig
+viele Cams gleichzeitig anschalten**. Die Chips sind immer da, auch wenn
+der Browser den Ton zunächst verweigert hat: ein Tap darauf ist selbst
+die Nutzergeste, die dafür fehlte. Und sie zeigen immer den **echten**
+Zustand — auch wenn der sich von selbst ändert, etwa durch die
+Stummschaltung im Hintergrund.
 
-Jede Kachel zeigt ihren Zustand unten links neben dem Namen: 🔊 für Ton
-an, 🔇 für stumm. Beide Zustände werden angezeigt — „kein Symbol" wäre
-nicht von „diese Kachel kennt kein Tonsymbol" zu unterscheiden.
+Jede Kachel zeigt ihren Zustand unten links neben dem Namen:
+Lautsprecher für Ton an, durchgestrichener Lautsprecher für stumm. Beide
+Zustände werden angezeigt — „kein Symbol" wäre nicht von „diese Kachel
+kennt kein Tonsymbol" zu unterscheiden.
 
-Diese Schalter werden bewusst **nicht gemerkt**. Nach einem Neuladen gilt
+Die Tonwahl wird bewusst **nicht gemerkt**. Nach einem Neuladen gilt
 wieder, was in `cams.json` steht. Bei einem Babyfon ist das die sichere
 Richtung: ein Kanal, den jemand einmal versehentlich stumm geschaltet
 hat, darf nicht tagelang stumm bleiben.
+
+**Der Ton folgt der Sichtbarkeit.** Wandert die App in den Hintergrund,
+werden alle Kacheln stumm; kommt sie zurück, kehrt der vorherige Zustand
+zurück. Anlass war das Fire Tablet, auf dem der Ton nach dem Verlassen
+der App unsichtbar weiterlief — unauffindbar für den, der ihn abstellen
+will. Wer bewusst **weiterhören** will, nimmt Bild-in-Bild: das Fenster
+ist sichtbar, und seine Kachel wird deshalb ausdrücklich nicht
+angefasst.
+
+### Kameras ausblenden
+
+Das ✕ am Chip blendet eine Kamera aus — für selten gebrauchte Cams wie
+den Springer. Die Ausblendung gilt **pro Gerät** (localStorage): das
+Tablet im Flur kann anders bestückt sein als das iPhone.
+
+Eine ausgeblendete Kamera ist wirklich aus: keine Verbindung, kein
+Watchdog, **kein Alarm**. Deshalb verschwindet sie nicht spurlos,
+sondern bleibt als gedämpfter Chip mit + in der Leiste stehen — ein Tap
+darauf holt sie zurück. Wer auf die Leiste schaut, sieht also immer,
+was gerade nicht überwacht wird.
 
 ### Bild-in-Bild
 

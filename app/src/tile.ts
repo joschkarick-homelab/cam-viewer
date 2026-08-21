@@ -17,6 +17,7 @@ import {
 } from './transport'
 import { Watchdog, backoffMs } from './watchdog'
 import { startAlarm, stopAlarm } from './keepalive'
+import { icon } from './icons'
 import { logEvent } from './log'
 
 export type TileState = 'connecting' | 'live' | 'stalled' | 'lost'
@@ -89,6 +90,9 @@ export class CamTile {
   private label: HTMLElement
   private reason: HTMLElement
 
+  /** Echtes Seitenverhältnis, sobald das erste Bild es verraten hat. */
+  aspect = 16 / 9
+
   private conn: Connection | null = null
   private dog: Watchdog | null = null
   private abort: AbortController | null = null
@@ -117,7 +121,6 @@ export class CamTile {
 
     this.label = document.createElement('div')
     this.label.className = 'label'
-    this.label.textContent = cam.name
 
     // Zeigt den letzten Fehlergrund, sobald die Kachel rot ist. Auf dem
     // Fire Tablet gibt es keine Entwicklerkonsole — ohne diese Zeile
@@ -131,7 +134,13 @@ export class CamTile {
     // Als CSS-Variable, damit die Vollbildregel weiter gewinnt.
     const adoptAspect = () => {
       const { videoWidth: w, videoHeight: h } = this.video
-      if (w > 0 && h > 0) this.el.style.setProperty('--ar', `${w} / ${h}`)
+      if (w > 0 && h > 0) {
+        this.el.style.setProperty('--ar', `${w} / ${h}`)
+        this.aspect = w / h
+        // Das Raster in main.ts rechnet mit den echten Seitenverhält-
+        // nissen — es muss erfahren, wenn eines feststeht.
+        this.el.dispatchEvent(new CustomEvent('tileaspect', { bubbles: true }))
+      }
     }
     this.video.addEventListener('loadedmetadata', adoptAspect)
     this.video.addEventListener('resize', adoptAspect)
@@ -181,7 +190,15 @@ export class CamTile {
     b.className = 'pip'
     b.type = 'button'
     b.title = 'Bild-in-Bild'
-    b.textContent = '⧉'
+    b.setAttribute('aria-label', 'Bild-in-Bild')
+    // Echtes Icon statt des ⧉-Zeichens: das Zeichen fällt je nach
+    // System-Font anders aus — auf dem Fire Tablet war es kaum als
+    // Knopf zu erkennen.
+    b.innerHTML =
+      '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">' +
+      '<rect x="3" y="5" width="18" height="14" rx="2" fill="none" ' +
+      'stroke="currentColor" stroke-width="2"/>' +
+      '<rect x="12" y="12" width="7" height="5" rx="1" fill="currentColor"/></svg>'
     b.addEventListener('click', (e) => {
       // Sonst schaltet der Klick zusätzlich das Vollbild der Kachel um.
       e.stopPropagation()
@@ -190,7 +207,7 @@ export class CamTile {
     return b
   }
 
-  private pipActive(): boolean {
+  pipActive(): boolean {
     return (
       document.pictureInPictureElement === this.video ||
       (this.video as any).webkitPresentationMode === 'picture-in-picture'
@@ -241,13 +258,30 @@ export class CamTile {
    */
   async unmute(): Promise<boolean> {
     this.setMuted(false)
-    try {
-      await this.video.play()
-      return true
-    } catch {
-      this.setMuted(true)
-      return false
-    }
+
+    // `play()` kennt DREI Ausgänge, nicht zwei: Erfolg, Ablehnung — und
+    // ewiges Warten. Die Promise bleibt offen, solange keine Daten
+    // ankommen, bei einer gestörten Kamera also für immer. Genau das hat
+    // auf dem Fire Tablet den ganzen Startknopf aufgehängt: eine Cam war
+    // nicht erreichbar, ihr play() hing, das Promise.all über alle
+    // Kacheln kam nie zurück — und "dann passiert nix".
+    //
+    // Die Ablehnung durch den Browser (Autoplay-Richtlinie) kommt
+    // dagegen sofort. Deshalb: kurz auf eine Ablehnung warten, danach
+    // optimistisch weitermachen. Ob wirklich Bild und Ton laufen,
+    // beurteilt ohnehin der Watchdog, nicht diese Funktion.
+    const played = this.video.play().then(() => true, () => false)
+    const ok = await Promise.race([
+      played,
+      new Promise<boolean>((r) => setTimeout(() => r(true), 1500)),
+    ])
+    if (!ok) this.setMuted(true)
+    // Eine SPÄTE Ablehnung (nach dem Timeout) trotzdem ehrlich zeigen —
+    // setMuted feuert das Ereignis, auf das die Schalter hören.
+    void played.then((res) => {
+      if (!res && !this.disposed) this.setMuted(true)
+    })
+    return ok
   }
 
   /** Der Stream-Name in go2rtc — je nach Gerät HD oder Substream. */
@@ -414,8 +448,33 @@ export class CamTile {
   isLost() { return this.state === 'lost' }
 
   setMuted(m: boolean) {
+    const changed = this.video.muted !== m || this.el.dataset.muted !== String(m)
     this.video.muted = m
     this.el.dataset.muted = String(m)
+    // Beide Zustände zeigen, nicht nur "Ton an": ein fehlendes Symbol
+    // wäre nicht von "diese Kachel kennt kein Tonsymbol" zu unterscheiden.
+    this.label.innerHTML = `<span>${this.cam.name}</span>${icon(m ? 'muted' : 'sound', 13)}`
+    // Die Schalter in der Leiste können den Zustand nicht abfragen, wenn
+    // er sich von selbst ändert — etwa beim Stummschalten im Hintergrund
+    // oder einer spät abgelehnten Tonfreigabe. Deshalb sagt die Kachel
+    // Bescheid, statt dass jemand pollt.
+    if (changed) this.el.dispatchEvent(new CustomEvent('tilemuted', { bubbles: true }))
+  }
+
+  /**
+   * Verbindung ruhen lassen — für ausgeblendete Kameras.
+   *
+   * Kein `dispose()`: die Kachel bleibt voll funktionsfähig und kommt
+   * mit `connect()` zurück. Wichtig ist das Aufräumen des Retry-Timers,
+   * sonst verbindet eine ausgeblendete Kamera im Hintergrund munter
+   * weiter und zieht Bandbreite für ein Bild, das niemand sieht.
+   */
+  suspend() {
+    clearTimeout(this.retryTimer)
+    this.retryTimer = undefined
+    this.attempt = 0
+    this.teardown()
+    this.setState('connecting')
   }
 
   /** Aktuelles Bild als PNG. Liefert null, solange kein Frame da ist. */
