@@ -697,34 +697,51 @@ steht in go2rtcs Codec-Tabelle:
 | WebRTC | PCMU, PCMA, OPUS |
 | MSE | AAC, FLAC |
 
-Tapo-Cams liefern über RTSP `PCMA` (G.711). Das ist für WebRTC ein
-Pflichtcodec — **im LAN läuft der Ton also einfach.** In einen
-MP4-Container passt PCMA aber nicht; go2rtc kann es nach FLAC
-umpacken, und genau da hört es auf: Safaris `ManagedMediaSource` nimmt
-FLAC nicht an. In der Diagnose ist das direkt ablesbar — `offeredCodecs`
-enthält kein `flac`, und in der Folge steht in `negotiatedCodecs` gar
-kein Audioteil. **Kein Audioteil heißt: es gibt keine Tonspur, die man
-lautstellen könnte.** Der Schalter geht dann an, ohne dass etwas zu hören
-ist.
+Tapo-Cams liefern über RTSP `PCMA` (G.711) — bestätigt über
+`/api/streams`:
+
+```json
+"medias": ["video, recvonly, H264", "audio, recvonly, PCMA/8000"],
+"codec":  { "codec_name": "pcm_alaw", "sample_rate": 8000 }
+```
+
+PCMA ist für WebRTC ein Pflichtcodec — **im LAN läuft der Ton also
+einfach.** In einen MP4-Container passt PCMA aber nicht; go2rtc kann es
+nach FLAC umpacken, und genau da hört es auf: Safaris
+`ManagedMediaSource` nimmt FLAC nicht an. In der Diagnose ist das direkt
+ablesbar — `offeredCodecs` enthält kein `flac`, und in der Folge steht in
+`negotiatedCodecs` gar kein Audioteil. **Kein Audioteil heißt: es gibt
+keine Tonspur, die man lautstellen könnte.** Der Schalter geht dann an,
+ohne dass etwas zu hören ist.
 
 Der Ausweg liegt in go2rtc, nicht in der App: eine zweite Quelle je
-Stream, die den Ton nach AAC transkodiert.
+Stream, die den Ton nach AAC wandelt. Fertig ausformuliert steht das in
+`go2rtc/go2rtc.yaml`; die Kurzform ist
 
 ```yaml
 streams:
   schlafzimmer:
-    - rtsp://admin:PASS@192.168.2.52:554/stream1
-    - ffmpeg:rtsp://admin:PASS@192.168.2.52:554/stream1#audio=aac
+    - rtsp://KAMERAKONTO:PASSWORT@192.168.2.52:554/stream1
+    - ffmpeg:schlafzimmer#audio=aac
 ```
+
+Zwei Details, die dabei leicht falsch gemacht werden:
+
+- **Als Eingabe der Stream-Name, nicht noch einmal die URL.** Beides ist
+  erlaubt, aber der Name lässt ffmpeg aus dem bereits offenen Datenstrom
+  von go2rtc lesen — die Kamera sieht weiterhin nur eine RTSP-Sitzung.
+  Mit der URL wären es bei sechs Streams zwölf.
+- **Nur `#audio=aac`, kein `#video=…`.** Wird ein Medientyp angegeben,
+  lässt ffmpeg den anderen weg. Diese Quelle liefert also ausschließlich
+  Ton; das Bild kommt unverändert aus der `rtsp://`-Zeile und kostet
+  keine CPU.
 
 go2rtc sucht sich pro Client aus beiden Quellen die passenden Codecs
 zusammen („multi-source codec negotiation"): WebRTC nimmt weiter das
-unveränderte PCMA, MSE bekommt das AAC aus der zweiten Quelle. Der
-ffmpeg-Prozess startet nur, wenn ihn wirklich jemand braucht — dafür
-muss `ffmpeg` aber auf der VM installiert sein.
-
-Was die Kamera wirklich sendet, zeigt `curl http://<go2rtc>:1984/api/streams`.
-Steht dort bereits `AAC`, liegt es an etwas anderem.
+unveränderte PCMA, MSE bekommt das AAC, HomeKit wandelt wie bisher nach
+OPUS. Der ffmpeg-Prozess startet nur, wenn ihn wirklich jemand braucht —
+`ffmpeg` muss dafür auf der VM liegen (`which ffmpeg`). Läuft HomeKit mit
+Ton, ist es fast sicher schon da.
 
 **Codecliste nicht erweitern.** `supportedCodecs()` in `transport.ts`
 entspricht Zeichen für Zeichen der Liste aus go2rtcs eigenem Player.

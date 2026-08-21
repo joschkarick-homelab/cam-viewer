@@ -145,16 +145,62 @@ streams:
   # Wenn der Rückkanal kommt: tapo:// als zusätzlichen Stream-Namen
   # anlegen und nur dafür verwenden, statt hier umzuschalten.
 
+  # ┌───────────────────────────────────────────────────────────────┐
+  # │ WARUM JE EINE ZWEITE ffmpeg:-ZEILE                             │
+  # └───────────────────────────────────────────────────────────────┘
+  #
+  # Ohne sie gibt es über MSE — also von außen — KEINEN TON.
+  #
+  # Die Cams liefern G.711 A-law. Im Producer von /api/streams steht:
+  #
+  #   "medias": ["video, recvonly, H264", "audio, recvonly, PCMA/8000"]
+  #   "codec":  { "codec_name": "pcm_alaw", "sample_rate": 8000 }
+  #
+  # PCMA ist für WebRTC ein Pflichtcodec — im LAN läuft der Ton deshalb
+  # ohne Zutun. In einen MP4-Container passt PCMA aber nicht. go2rtc kann
+  # nach FLAC umpacken, und genau da endet es: Safaris
+  # ManagedMediaSource nimmt FLAC nicht an. In der Diagnose der App ist
+  # das direkt ablesbar — "offeredCodecs" enthält kein flac, und in der
+  # Folge steht in "negotiatedCodecs" GAR KEIN Audioteil. Kein Audioteil
+  # heißt: es gibt keine Tonspur, die man lautstellen könnte. Der
+  # Ton-Schalter geht an und es passiert nichts.
+  #
+  # Bleibt AAC, und das erzeugt ffmpeg.
+  #
+  # Als Eingabe steht der STREAM-NAME, nicht noch einmal die rtsp://-URL.
+  # Beides ist erlaubt, aber der Stream-Name lässt ffmpeg aus dem bereits
+  # offenen Datenstrom von go2rtc lesen — die Kamera sieht weiterhin nur
+  # EINE RTSP-Sitzung. Mit der URL wäre es eine zweite, bei sechs Streams
+  # also zwölf statt sechs.
+  #
+  # Nur "#audio=aac", kein "#video=...": wird ein Medientyp angegeben,
+  # lässt ffmpeg den anderen weg. Diese Quelle liefert also ausschließlich
+  # die Tonspur. Das Bild kommt unverändert aus der rtsp://-Zeile darüber,
+  # wird nicht angefasst und kostet keine CPU.
+  #
+  # go2rtc sucht sich pro Client aus beiden Quellen zusammen, was passt
+  # ("multi-source codec negotiation"): WebRTC nimmt weiter das
+  # unveränderte PCMA, MSE bekommt das AAC. HomeKit bleibt ebenfalls
+  # unberührt und transkodiert wie bisher nach OPUS. Der ffmpeg-Prozess
+  # startet erst, wenn ihn wirklich jemand braucht.
+  #
+  # VORAUSSETZUNG: ffmpeg muss auf der VM liegen ("which ffmpeg").
+  # Läuft HomeKit mit Ton, ist es fast sicher schon da — dafür wird
+  # ebenfalls aus PCMA gewandelt.
+
   schlafzimmer:
     - rtsp://KAMERAKONTO:PASSWORT@192.168.2.52:554/stream1
+    - ffmpeg:schlafzimmer#audio=aac
     # - tapo://TAPO_CLOUD_PASSWORD@192.168.2.52   # kein Bild in Safari
 
   kinderzimmer:
     - rtsp://KAMERAKONTO:PASSWORT@192.168.2.115:554/stream1
+    - ffmpeg:kinderzimmer#audio=aac
     # - tapo://TAPO_CLOUD_PASSWORD@192.168.2.115  # kein Bild in Safari
 
   springer:
     - rtsp://KAMERAKONTO:PASSWORT@192.168.2.35:554/stream1
+    - ffmpeg:springer#audio=aac
     # - tapo://TAPO_CLOUD_PASSWORD@192.168.2.35   # kein Bild in Safari
 
   # Substreams (VGA) für das Fire Tablet 7. Eigene Stream-Namen, damit
@@ -163,10 +209,13 @@ streams:
   # Bei RTSP ist das /stream2 statt /stream1 — kein ?subtype=1.
   schlafzimmer_sd:
     - rtsp://KAMERAKONTO:PASSWORT@192.168.2.52:554/stream2
+    - ffmpeg:schlafzimmer_sd#audio=aac
   kinderzimmer_sd:
     - rtsp://KAMERAKONTO:PASSWORT@192.168.2.115:554/stream2
+    - ffmpeg:kinderzimmer_sd#audio=aac
   springer_sd:
     - rtsp://KAMERAKONTO:PASSWORT@192.168.2.35:554/stream2
+    - ffmpeg:springer_sd#audio=aac
 
 # ── HomeKit ────────────────────────────────────────────────────────
 #
