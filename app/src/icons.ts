@@ -32,9 +32,11 @@ const PATHS = {
   /** Kreuz — ausblenden/schließen. */
   hide:
     '<path d="M7 7l10 10M17 7L7 17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
-  /** Plus — wieder einblenden. */
-  show:
-    '<path d="M12 6v12M6 12h12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+  /** Durchgestrichene Kamera — ausgeblendet, wird nicht überwacht. */
+  camoff:
+    '<path d="M4 7h9a1 1 0 0 1 1 1v2.2l4-2.4v8.4l-4-2.4V16a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z" ' +
+    'fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>' +
+    '<path d="M4.5 4.5l15 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
 }
 
 export type IconName = keyof typeof PATHS

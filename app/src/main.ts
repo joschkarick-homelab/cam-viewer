@@ -138,6 +138,14 @@ async function main() {
   })
 
   buildBar(transport, sd)
+
+  // Der Alarm braucht einen entsperrten AudioContext, und Browser
+  // entsperren nur in einer echten Geste. Bisher hing das allein am
+  // Startknopf — läuft der Ton aber von selbst an oder fliegt der Knopf
+  // mangels Wake Lock raus, tippt ihn nie jemand, und der Alarm bliebe
+  // stumm. Deshalb entsperrt die ERSTE Berührung, egal wo sie landet.
+  document.addEventListener('pointerdown', () => unlockAudio(), { once: true })
+
   // Nur bei Bedarf nachladen: die Diagnose kostet gut 1,5 kB, die im
   // Normalbetrieb niemand braucht.
   if (debugEnabled()) {
@@ -271,7 +279,9 @@ function buildBar(transport: Transport, sd: boolean) {
   //
   // Der Knopf bleibt auch dann nötig, wenn der Ton schon von selbst
   // läuft — Wake Lock gibt es ohne Geste nirgends.
-  const start = button(`${icon('sound')}<span>Ton & Bildschirm an</span>`, async () => {
+  // Ohne Wake-Lock-API verspricht der Knopf nur, was er halten kann.
+  const startLabel = wakeLockSupported ? 'Ton & Bildschirm an' : 'Ton an'
+  const start = button(`${icon('sound')}<span>${startLabel}</span>`, async () => {
     try {
       unlockAudio()
 
@@ -313,11 +323,23 @@ function buildBar(transport: Transport, sd: boolean) {
 /**
  * Läuft überall Ton, wo er laufen soll, schrumpft der Startknopf auf
  * seine verbleibende Aufgabe zusammen: den Bildschirm wachhalten.
+ *
+ * Und wo es die Wake-Lock-API gar nicht gibt — Fire Tablet —, hat er
+ * dann KEINE Aufgabe mehr und verschwindet. Ein Knopf, der nichts tut,
+ * ist schlimmer als kein Knopf; den Bildschirm hält dort ohnehin die
+ * Kiosk-App wach. Der Alarm hängt nicht mehr an ihm: die erste
+ * Berührung irgendwo entsperrt den AudioContext (siehe main()).
  */
 function updateStartButton() {
   if (!startButton) return
   const soundDone = !tiles.some((t) => !isHidden(t) && t.wantsSound && t.muted)
-  if (soundDone) startButton.innerHTML = `${icon('screen')}<span>Bildschirm anlassen</span>`
+  if (!soundDone) return
+  if (wakeLockSupported) {
+    startButton.innerHTML = `${icon('screen')}<span>Bildschirm anlassen</span>`
+  } else {
+    startButton.remove()
+    startButton = null
+  }
 }
 
 /**
@@ -342,9 +364,17 @@ function renderPicker() {
   if (!wrap) return
   wrap.replaceChildren()
 
-  tiles.forEach((t) => {
+  // Aktive zuerst, Ausgeblendete gesammelt dahinter. Nach cams.json
+  // sortiert stünden die grauen Chips mitten zwischen den grünen —
+  // zwei Gruppen lesen sich schneller als eine gemischte Reihe.
+  const ordered = [
+    ...tiles.filter((t) => !isHidden(t)),
+    ...tiles.filter((t) => isHidden(t)),
+  ]
+
+  ordered.forEach((t) => {
     if (isHidden(t)) {
-      const b = button(`${icon('show')}<span>${t.name}</span>`, () => setHidden(t, false))
+      const b = button(`${icon('camoff')}<span>${t.name}</span>`, () => setHidden(t, false))
       b.className = 'chip ghost'
       b.title = `${t.name} einblenden`
       wrap.append(b)

@@ -100,11 +100,15 @@ button.primary {
    ein schmales ✕ zum Ausblenden. Beide Teile teilen sich eine Pille,
    damit sie als EIN Ding lesbar sind. */
 
-.picker { display: flex; gap: 6px; flex-wrap: wrap; }
+/* align-items: center, nicht das Flex-Default stretch — sonst richtet
+   sich jeder Chip an der höchsten Zeile aus und die Pillen wirken je
+   nach Nachbarschaft unterschiedlich hoch. Alle Chips: 44px. */
+.picker { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 
 .chip {
   display: inline-flex;
   align-items: stretch;
+  height: 44px;
   background: var(--raised);
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -115,7 +119,8 @@ button.primary {
   background: none;
   border: none;
   border-radius: 0;
-  min-height: 42px;
+  min-height: 0;
+  height: 100%;
 }
 
 .chip .snd { padding: 0 6px 0 14px; color: var(--dim); }
@@ -133,14 +138,22 @@ button.primary {
 .chip.on .snd { color: var(--live); }
 .chip.on .hide { border-left-color: #2c4a3a; }
 
-/* Ausgeblendete Kamera: bewusst sichtbarer, gedämpfter Chip.
-   Sie wird NICHT überwacht — spurlos verschwinden darf sie nicht. */
+/* Ausgeblendete Kamera: bewusst sichtbarer, gedämpfter Chip mit
+   durchgestrichener Kamera — sie wird NICHT überwacht, und spurlos
+   verschwinden darf sie nicht. Gleiche Höhe und Geometrie wie die
+   aktiven Chips, damit die Reihe eine Linie bleibt; nur Füllung und
+   gestrichelter Rand sagen "aus". Tap = wieder einblenden. */
 button.chip.ghost {
+  align-items: center;
+  justify-content: center;
   border-radius: 999px;
   border-style: dashed;
   color: var(--dim);
   background: none;
+  padding: 0 16px;
 }
+
+button.chip.ghost:active { background: var(--raised); }
 
 /* ── Kachelraster ───────────────────────────────────────────────── */
 
