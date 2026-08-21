@@ -422,10 +422,16 @@ keinen neuen Build, nur ein Neuladen.
 
 Die App versucht den Ton gleich beim Start anzuschalten. Auf dem Desktop
 klappt das oft von selbst; sonst verlangen Browser eine echte Nutzergeste
-und es bleibt beim Tap auf **„Ton & Bildschirm an"**. Der Knopf erledigt
-ohnehin zwei weitere Dinge, die ohne Geste nirgends gehen: AudioContext
-entsperren (nötig für den Alarm) und Wake Lock anfordern. Läuft der Ton
-schon, heißt er nur noch „Bildschirm anlassen".
+und es bleibt beim Tap auf **„Ton & Bildschirm an"**. Läuft der Ton
+schon, heißt der Knopf nur noch „Bildschirm anlassen" — und auf Geräten
+**ohne Wake-Lock-API** (Fire Tablet) verschwindet er dann ganz, weil er
+dort nichts mehr zu tun hätte; den Bildschirm hält die Kiosk-App wach.
+Auf solchen Geräten heißt er von vornherein nur „Ton an".
+
+Der **Alarmton** hängt nicht am Knopf: die erste Berührung der Seite,
+egal wo, entsperrt den AudioContext. Ohne mindestens eine Berührung
+lässt kein Browser synthetischen Ton zu — einmal irgendwo tippen gehört
+beim Aufstellen also dazu.
 
 Pro Kamera steht ein Chip in der Leiste — **Ton lässt sich für beliebig
 viele Cams gleichzeitig anschalten**. Die Chips sind immer da, auch wenn
