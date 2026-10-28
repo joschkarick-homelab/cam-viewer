@@ -1,6 +1,6 @@
 # cam-viewer
 
-Leichtgewichtige PWA, um die Tapo-Cams auf allen Geräten anzuschauen —
+Leichtgewichtige PWA, um die Tapo-Cams auf allen Geräten anzuschauen -
 als Ersatz für Scrypted NVR. Eine Codebasis für iOS, iPadOS, macOS,
 Windows, Android und das Fire Tablet.
 
@@ -30,7 +30,7 @@ Tapo C100/C200 ──rtsp://──► go2rtc  (Scrypted-VM, 192.168.2.166)
                      cam.DEINE-DOMAIN.tld
 ```
 
-WebRTC-Medien laufen am Proxy vorbei direkt zu `go2rtc:8555` — das geht
+WebRTC-Medien laufen am Proxy vorbei direkt zu `go2rtc:8555` - das geht
 nur intern. Von außen bleibt MSE, das komplett durch den Proxy fließt.
 
 | | intern (192.168.2.0/24) | extern |
@@ -40,7 +40,7 @@ nur intern. Von außen bleibt MSE, das komplett durch den Proxy fließt.
 | Latenz | ~0,3 s | ~1 s |
 
 **Warum extern MSE?** WebRTC-Medien laufen direkt auf Port 8555 und
-damit am Reverse Proxy — und an authentik — vorbei. Von außen müsstest
+damit am Reverse Proxy - und an authentik - vorbei. Von außen müsstest
 du diesen Port ungeschützt öffnen. MSE fließt komplett über die
 bestehende WSS-Verbindung, also nur Port 443. Die App wählt selbst.
 
@@ -69,17 +69,17 @@ systemctl daemon-reload && systemctl enable --now go2rtc
 
 Die Config gehört bewusst dem Dienstbenutzer und nicht `root`: go2rtc
 schreibt die HomeKit-Pairings dort hinein. Aus demselben Grund steht
-`/etc/go2rtc` in den `ReadWritePaths` der Unit — `ProtectSystem=strict`
+`/etc/go2rtc` in den `ReadWritePaths` der Unit - `ProtectSystem=strict`
 würde das sonst blockieren.
 
 In `go2rtc.yaml` auszufüllen sind **Kamerakonto und Passwort** für die
-`rtsp://`-Zeilen — anzulegen in der Tapo-App unter *Geräteeinstellungen
+`rtsp://`-Zeilen - anzulegen in der Tapo-App unter *Geräteeinstellungen
 → Erweitert → Kamerakonto*.
 
 > **Warum rtsp:// und nicht tapo://?** `tapo://` liefert go2rtc keine
 > fmtp-Zeile, also weder SPS noch PPS. go2rtc schreibt dann einen
 > Platzhalter in den MP4-Container (`pkg/mp4/muxer.go`: `sps = {0x67,
-> 0x42, 0x00, 0x0a, …}` — Baseline Level 1.0, 128×96). Chrome liest die
+> 0x42, 0x00, 0x0a, …}` - Baseline Level 1.0, 128×96). Chrome liest die
 > echten Parameter aus dem Datenstrom nach; **Safari nicht** und bricht
 > mit `MEDIA_ERR_DECODE` ab. Über MSE bleibt damit auf jedem
 > Apple-Gerät das Bild schwarz. `rtsp://` liefert
@@ -90,7 +90,7 @@ In `go2rtc.yaml` auszufüllen sind **Kamerakonto und Passwort** für die
 > nicht als Ersatz.
 
 Die LAN-IP der VM unter `webrtc.candidates` steht bereits auf
-`192.168.2.166` — zieht die VM um, gehört sie dort **und** im Secret
+`192.168.2.166` - zieht die VM um, gehört sie dort **und** im Secret
 `GO2RTC_HOST` geändert.
 
 Vorher einmalig in der Tapo-App: **Ich → Tapo Lab → Third-Party
@@ -99,7 +99,7 @@ auch mit dem richtigen Passwort.
 
 #### Welches Passwort?
 
-Das deines **TP-Link-/Tapo-Kontos** — das mit der E-Mail-Adresse, mit
+Das deines **TP-Link-/Tapo-Kontos** - das mit der E-Mail-Adresse, mit
 dem du dich in der App anmeldest.
 
 | | wofür | wo |
@@ -113,11 +113,11 @@ nicht mehr weißt, in der App unter *Ich → Konto* zurücksetzen. Bei
 geteilten Cams gilt das Passwort des Besitzer-Kontos.
 
 Wer das Klartext-Passwort nicht auf der VM liegen haben will, trägt
-stattdessen dessen Hash ein — `tapo://admin:<HASH in Großbuchstaben>@<IP>`.
+stattdessen dessen Hash ein - `tapo://admin:<HASH in Großbuchstaben>@<IP>`.
 Das `admin:` ist Pflicht: ohne Benutzername behandelt go2rtc den Wert
 als Klartext-Passwort und hasht ihn ein zweites Mal, Ergebnis
 `unauthorized`. Ob die Cam MD5 oder SHA256 will, entscheidet sie selbst
-(`encrypt_type`) — also erst mit Klartext verifizieren, dass sie läuft,
+(`encrypt_type`) - also erst mit Klartext verifizieren, dass sie läuft,
 dann umstellen.
 
 Gegenüber der Kamera ist der Hash passwortäquivalent, aber das
@@ -156,7 +156,7 @@ Proxy Host für `cam.DEINE-DOMAIN.tld` anlegen:
 > NPMplus erzeugt diesen Block selbst (`proxy_host.conf`, Zeile 147).
 > Ein zweiter davon lässt `nginx -t` mit `duplicate location "/"`
 > scheitern. NPMplus benennt die Config dann in `.err` um, markiert den
-> Host als **Offline** — und weil es den vHost damit gar nicht gibt,
+> Host als **Offline** - und weil es den vHost damit gar nicht gibt,
 > landet die Domain auf der NPMplus-Startseite statt bei der App.
 > Dasselbe gilt für `location /outpost.goauthentik.io` und
 > `@goauthentik_proxy_signin`: auch die erzeugt NPMplus selbst.
@@ -179,13 +179,13 @@ und den Container neu erzeugen:
 
 **2. Im Proxy Host** unter *Auth Request* `authentik` wählen.
 
-Das Dropdown allein reicht nicht — ohne die Variable bleibt der Upstream
+Das Dropdown allein reicht nicht - ohne die Variable bleibt der Upstream
 leer. Das Format ist streng: **Schema + Host + Port, kein Pfad.**
 `/outpost.goauthentik.io` hängt NPMplus selbst an; steht der Pfad in der
 Variablen, lehnt `envs.sh` sie beim Start mit einer entsprechenden
 Meldung ab.
 
-Der Port ist der, unter dem der Outpost antwortet — nicht zwingend der
+Der Port ist der, unter dem der Outpost antwortet - nicht zwingend der
 der authentik-Oberfläche. NPMplus merkt in seiner `compose.yaml` an,
 dass der Weg derzeit nur mit dem **eingebetteten** Outpost funktioniert;
 bei einem eigenständigen Proxy-Outpost bleibt der Host zwar Online, der
@@ -193,7 +193,7 @@ Login-Redirect kommt aber nicht.
 
 **HTTP 500 nach dem Aktivieren?** Dann hat der Outpost auf die
 Prüfanfrage etwas geantwortet, mit dem nginx nichts anfangen kann.
-`auth_request` kennt nur 2xx (durchlassen), 401/403 (ablehnen) — alles
+`auth_request` kennt nur 2xx (durchlassen), 401/403 (ablehnen) - alles
 andere wird zu 500. Die Zahl steht in `docker logs npmplus`:
 `auth request unexpected status: …`.
 
@@ -212,13 +212,13 @@ ohne den Header testest du gegen die IP von authentik und bekommst
 zwangsläufig einen 404.
 
 **Warum ein 404 und keine sprechende Meldung?** Weil der eingebettete
-Outpost bei unbekanntem Host stillschweigend abgibt —
+Outpost bei unbekanntem Host stillschweigend abgibt -
 `HandleHost()` in `proxyv2.go` liefert schlicht `false`, und die
 Anfrage geht an die Django-Oberfläche, die mit ihrer 404-Seite
 antwortet. Die aussagekräftige Variante (`400` mit
 `"no app for hostname"`) gibt es nur beim eigenständigen Outpost.
 
-Ob der eingebettete Outpost überhaupt läuft, klärt dieser Aufruf — er
+Ob der eingebettete Outpost überhaupt läuft, klärt dieser Aufruf - er
 wird vor jeder App-Suche behandelt und ist von der Zuweisung unabhängig:
 
 ```bash
@@ -243,13 +243,13 @@ Schritt 3 passiert **nicht** automatisch und ist der übliche Grund für
 den 404: die Anwendungsliste des eingebetteten Outposts ist anfangs
 leer, er kann die Anfrage also keinem Provider zuordnen. Nach dem
 Zuweisen lädt er selbstständig neu. Ob es gewirkt hat, sieht man in der
-Outpost-Liste an der Spalte *Providers* — `-` heißt: keine Zuweisung.
+Outpost-Liste an der Spalte *Providers* - `-` heißt: keine Zuweisung.
 
 Und noch eine Einstellung am Outpost: **`authentik_host` muss auf die
 HTTPS-Adresse von authentik zeigen.** Der eingebettete Outpost nimmt
 diesen Wert unverändert für die Login-URL im Browser
 (`GetOIDCEndpoint` in `endpoint.go`). Steht dort eine `http://`-Adresse,
-landet der Nutzer auf einer ungesicherten Anmeldeseite — und WebAuthn
+landet der Nutzer auf einer ungesicherten Anmeldeseite - und WebAuthn
 bzw. Passkeys verweigern dort den Dienst, weil sie einen Secure Context
 verlangen. In der Outpost-Liste steht der aktuelle Wert als Hinweis
 unter dem Namen („Logging in via …").
@@ -265,14 +265,14 @@ unter dem Namen („Logging in via …").
 | Deny | `all` |
 
 `satisfy any` steht im generierten `location /` vor den
-`auth_request`-Direktiven — erfüllt ein Client eine der Bedingungen, ist
+`auth_request`-Direktiven - erfüllt ein Client eine der Bedingungen, ist
 er durch. Eine LAN-IP genügt damit, von außen greift authentik.
 
 #### Split-DNS
 
 Internes DNS muss `cam.DEINE-DOMAIN.tld` auf die **LAN-IP von NPMplus**
 zeigen. Sonst laufen interne Geräte über den Internet-Umweg und bekommen
-fälschlich den Login — und, weniger offensichtlich, sie schleppen jedes
+fälschlich den Login - und, weniger offensichtlich, sie schleppen jedes
 Videopaket zweimal durch den Uplink, was sich als Ruckeln zeigt.
 
 An einer FRITZ!Box geht das über *Heimnetz → Netzwerk → Netzwerk-
@@ -283,7 +283,7 @@ genau das Muster eines Rebind-Angriffs ist.
 
 ### 4. HomeKit umziehen (optional)
 
-Cams **zuerst** aus Scrypteds HomeKit-Bridge entfernen — ein Gerät kann
+Cams **zuerst** aus Scrypteds HomeKit-Bridge entfernen - ein Gerät kann
 nur mit einem Ökosystem gepairt sein. Dann in der Home-App über
 „Weitere Optionen → Code eingeben" die PINs aus `go2rtc.yaml` nutzen.
 
@@ -305,7 +305,7 @@ push auf main
 Der Container liefert nicht nur die statischen Dateien aus, sondern
 reicht auch `/api` an go2rtc weiter. Das ist Absicht: dadurch liegen
 Same-Origin-Setup und die kritischen WebSocket-Timeouts versioniert im
-Repo statt handgetippt in einem NPMplus-Textfeld — und werden bei jedem
+Repo statt handgetippt in einem NPMplus-Textfeld - und werden bei jedem
 Deploy automatisch mit ausgerollt.
 
 ### Einmalig einzurichten
@@ -313,13 +313,13 @@ Deploy automatisch mit ausgerollt.
 Das Repo liegt in derselben Org wie `color-dices` und nutzt dieselben
 Secret-Namen. **Organization Secrets gelten aber nicht automatisch für
 jedes Repo der Org.** Jedes hat unter *Repository access* entweder „All
-repositories" oder „Selected repositories" stehen — im zweiten Fall muss
+repositories" oder „Selected repositories" stehen - im zweiten Fall muss
 `cam-viewer` dort ausdrücklich eingetragen werden, sonst kommt der Wert
 im Workflow als leerer String an.
 
 Das ist die unauffälligste Fehlerquelle im ganzen Deploy: GitHub lässt
 leere Inputs kommentarlos weg, und die Tailscale-Action meldet dann nur
-„Please provide either an auth key, OAuth secret and tags…" — ohne zu
+„Please provide either an auth key, OAuth secret and tags…" - ohne zu
 sagen, welcher Wert fehlt. Der Preflight-Schritt in `deploy.yml` fängt
 das ab und nennt die fehlenden Namen.
 
@@ -331,8 +331,8 @@ das ab und nennt die fehlenden Namen.
 | `TS_OAUTH_SECRET` | | ggf. schon auf Org-Ebene da |
 | `DEPLOY_USER` | `root` | ggf. schon auf Org-Ebene da |
 | `DEPLOY_HOST` | LXC im Tailnet | ggf. schon auf Org-Ebene da |
-| `HOST_PORT` | `8091` | **neu** — darf nicht mit Qwixx (8090) kollidieren |
-| `GO2RTC_HOST` | `192.168.2.166:1984` | **neu** — **mit Port**, siehe unten |
+| `HOST_PORT` | `8091` | **neu** - darf nicht mit Qwixx (8090) kollidieren |
+| `GO2RTC_HOST` | `192.168.2.166:1984` | **neu** - **mit Port**, siehe unten |
 
 **→ Variables:**
 
@@ -341,7 +341,7 @@ das ab und nennt die fehlenden Namen.
 | `DEPLOY_PATH` | `/opt/apps/cam-viewer` |
 
 **`GO2RTC_HOST` braucht den Port.** Der Wert landet unverändert in
-`proxy_pass http://…;` — steht dort nur `192.168.2.166`, proxyt nginx
+`proxy_pass http://…;` - steht dort nur `192.168.2.166`, proxyt nginx
 nach Port 80 statt 1984. Die App lädt dann ganz normal, weil die
 statischen Dateien nichts mit dem Proxy zu tun haben, und nur die
 Streams schlagen fehl. Ein Fehlerbild, das nach Kamera- oder
@@ -361,7 +361,7 @@ also *Actions → Deploy to Homelab → Run workflow*.
 
 ### Privates GHCR-Package
 
-Das Package sollte nach dem ersten Build auf **privat** stehen — die
+Das Package sollte nach dem ersten Build auf **privat** stehen - die
 Kamerabilder sind zwar nicht im Image, der Aufbau des Heimnetzes aber
 schon (`nginx.conf`, `cams.json`). Ein privates Package heißt allerdings:
 `docker compose pull` in der LXC scheitert mit
@@ -370,7 +370,7 @@ schon (`nginx.conf`, `cams.json`). Ein privates Package heißt allerdings:
 error from registry: denied
 ```
 
-— eine Meldung, die nach einem falschen Tag aussieht und in Wahrheit
+Das ist eine Meldung, die nach einem falschen Tag aussieht und in Wahrheit
 „nicht eingeloggt" bedeutet.
 
 Der Deploy-Workflow löst das selbst: er reicht das ohnehin vorhandene
@@ -378,7 +378,7 @@ Der Deploy-Workflow löst das selbst: er reicht das ohnehin vorhandene
 meldet sich danach wieder ab. Das Token gilt nur für die Dauer des Laufs
 und liegt weder in der Prozessliste noch dauerhaft in
 `~/.docker/config.json`. Dafür braucht der Job `permissions: packages:
-read` — ohne das darf `GITHUB_TOKEN` keine Packages lesen, auch nicht die
+read` - ohne das darf `GITHUB_TOKEN` keine Packages lesen, auch nicht die
 des eigenen Repos.
 
 Wer stattdessen von Hand in der LXC pullen will, meldet sich einmalig mit
@@ -398,7 +398,7 @@ links auf jeder Kachel schaltet Bild-in-Bild.
 Das Raster rechnet seine Aufteilung selbst: aus Fensterform und den
 echten Bildmaßen wird die Spaltenzahl gewählt, die den Kacheln am
 meisten Fläche gibt, und das Ganze zentriert. Auf einem Tablet quer
-heißt das bei drei Kameras 2+1 statt drei Winzlingen in einer Reihe —
+heißt das bei drei Kameras 2+1 statt drei Winzlingen in einer Reihe -
 `auto-fit` mit fester Mindestbreite konnte das nicht.
 
 Vollbild hat zwei Stufen, je nachdem was das Gerät kann: die anderen
@@ -408,7 +408,7 @@ räumt auch die Browserleisten weg.
 
 Angefordert wird das Vollbild bewusst für `#app` und nicht für das
 Video-Element. Auf dem iPhone gäbe es echtes Vollbild nur über
-`video.webkitEnterFullscreen()` — dann aber im nativen Player, ohne
+`video.webkitEnterFullscreen()` - dann aber im nativen Player, ohne
 Statusabzeichen und **ohne Ausgrauen**. Ein eingefrorenes Bild sähe dort
 aus wie ein Livebild. Dafür ist die erste Stufe der bessere Handel; im
 installierten Zustand füllt sie ohnehin fast den ganzen Schirm.
@@ -416,33 +416,33 @@ installierten Zustand füllt sie ohnehin fast den ganzen Schirm.
 ### Ton
 
 **Ton ist der Normalzustand, nicht die Ausnahme.** Welche Cam nach dem
-Start Ton hat, steht als `sound` in `cams.json` — ohne Angabe gilt
+Start Ton hat, steht als `sound` in `cams.json` - ohne Angabe gilt
 `true`. Die Datei wird zur Laufzeit gelesen, eine Änderung braucht also
 keinen neuen Build, nur ein Neuladen.
 
 Die App versucht den Ton gleich beim Start anzuschalten. Auf dem Desktop
 klappt das oft von selbst; sonst verlangen Browser eine echte Nutzergeste
 und es bleibt beim Tap auf **„Ton & Bildschirm an"**. Läuft der Ton
-schon, heißt der Knopf nur noch „Bildschirm anlassen" — und auf Geräten
+schon, heißt der Knopf nur noch „Bildschirm anlassen" - und auf Geräten
 **ohne Wake-Lock-API** (Fire Tablet) verschwindet er dann ganz, weil er
 dort nichts mehr zu tun hätte; den Bildschirm hält die Kiosk-App wach.
 Auf solchen Geräten heißt er von vornherein nur „Ton an".
 
 Der **Alarmton** hängt nicht am Knopf: die erste Berührung der Seite,
 egal wo, entsperrt den AudioContext. Ohne mindestens eine Berührung
-lässt kein Browser synthetischen Ton zu — einmal irgendwo tippen gehört
+lässt kein Browser synthetischen Ton zu - einmal irgendwo tippen gehört
 beim Aufstellen also dazu.
 
-Pro Kamera steht ein Chip in der Leiste — **Ton lässt sich für beliebig
+Pro Kamera steht ein Chip in der Leiste - **Ton lässt sich für beliebig
 viele Cams gleichzeitig anschalten**. Die Chips sind immer da, auch wenn
 der Browser den Ton zunächst verweigert hat: ein Tap darauf ist selbst
 die Nutzergeste, die dafür fehlte. Und sie zeigen immer den **echten**
-Zustand — auch wenn der sich von selbst ändert, etwa durch die
+Zustand - auch wenn der sich von selbst ändert, etwa durch die
 Stummschaltung im Hintergrund.
 
 Jede Kachel zeigt ihren Zustand unten links neben dem Namen:
 Lautsprecher für Ton an, durchgestrichener Lautsprecher für stumm. Beide
-Zustände werden angezeigt — „kein Symbol" wäre nicht von „diese Kachel
+Zustände werden angezeigt - „kein Symbol" wäre nicht von „diese Kachel
 kennt kein Tonsymbol" zu unterscheiden.
 
 Die Tonwahl wird bewusst **nicht gemerkt**. Nach einem Neuladen gilt
@@ -453,20 +453,20 @@ hat, darf nicht tagelang stumm bleiben.
 **Der Ton folgt der Sichtbarkeit.** Wandert die App in den Hintergrund,
 werden alle Kacheln stumm; kommt sie zurück, kehrt der vorherige Zustand
 zurück. Anlass war das Fire Tablet, auf dem der Ton nach dem Verlassen
-der App unsichtbar weiterlief — unauffindbar für den, der ihn abstellen
+der App unsichtbar weiterlief - unauffindbar für den, der ihn abstellen
 will. Wer bewusst **weiterhören** will, nimmt Bild-in-Bild: das Fenster
 ist sichtbar, und seine Kachel wird deshalb ausdrücklich nicht
 angefasst.
 
 ### Kameras ausblenden
 
-Das ✕ am Chip blendet eine Kamera aus — für selten gebrauchte Cams wie
+Das ✕ am Chip blendet eine Kamera aus - für selten gebrauchte Cams wie
 den Springer. Die Ausblendung gilt **pro Gerät** (localStorage): das
 Tablet im Flur kann anders bestückt sein als das iPhone.
 
 Eine ausgeblendete Kamera ist wirklich aus: keine Verbindung, kein
 Watchdog, **kein Alarm**. Deshalb verschwindet sie nicht spurlos,
-sondern bleibt als gedämpfter Chip mit + in der Leiste stehen — ein Tap
+sondern bleibt als gedämpfter Chip mit + in der Leiste stehen - ein Tap
 darauf holt sie zurück. Wer auf die Leiste schaut, sieht also immer,
 was gerade nicht überwacht wird.
 
@@ -474,7 +474,7 @@ was gerade nicht überwacht wird.
 
 Der eigentliche Gewinn steckt auf dem iPhone: **iOS spielt ein
 PiP-Fenster weiter, wenn die App in den Hintergrund geht.** Ohne PiP ist
-der Stream weg, sobald man die App wegwischt — siehe „Bekannte Grenzen".
+der Stream weg, sobald man die App wegwischt - siehe „Bekannte Grenzen".
 
 Safari (macOS wie iOS) wird über `webkitSetPresentationMode` bedient,
 alle anderen über `requestPictureInPicture()`. Auf iOS meldet
@@ -491,13 +491,13 @@ muss PiP also neu angefordert werden.
 |---|---|
 | 🟢 Live | Frames kommen an |
 | 🟡 Verbinde… | Verbindungsaufbau |
-| 🟡 Kein Bild | Stream steht — Bild wird ausgegraut, Reconnect läuft |
+| 🟡 Kein Bild | Stream steht - Bild wird ausgegraut, Reconnect läuft |
 | 🔴 Verbindung weg | mehrere Fehlversuche, Rahmen pulsiert, **Alarm piept** |
 
 Der Alarm verstummt erst, wenn keine Kamera mehr im roten Zustand ist.
 
-Ist eine Kachel nicht live, steht der letzte Fehlergrund klein darunter
-— dieselbe Meldung landet mit Präfix `[cam-viewer/<cam>]` in der
+Ist eine Kachel nicht live, steht der letzte Fehlergrund klein darunter.
+Dieselbe Meldung landet mit Präfix `[cam-viewer/<cam>]` in der
 Browser-Konsole. Auf dem Fire Tablet gibt es keine Dev-Tools, deshalb
 steht sie auch auf der Kachel.
 
@@ -507,14 +507,14 @@ Von außen nach innen, jeder Schritt schließt eine Ebene aus:
 
 | Test | Was er bedeutet |
 |---|---|
-| `?transport=mse` anhängen | läuft es damit, liegt es an WebRTC — also an `webrtc.candidates` oder Port 8555, nicht am Proxy |
+| `?transport=mse` anhängen | läuft es damit, liegt es an WebRTC - also an `webrtc.candidates` oder Port 8555, nicht am Proxy |
 | `http://<host>/api/streams` im Browser | JSON mit den Stream-Namen = der `/api`-Proxy erreicht go2rtc |
 | `http://<VM-IP>:1984` direkt | go2rtcs eigene Oberfläche. Kein Bild hier = das Problem liegt vor der App |
 | `journalctl -u go2rtc -f` auf der VM | die Logs, die nginx **nicht** zeigt |
 
 Wichtig zur Einordnung: die Docker-Logs des Containers sind nginx-Logs.
 Ein `200` auf `POST /api/webrtc` heißt nur, dass go2rtc eine SDP-Answer
-geliefert hat — über den anschließenden Medienpfad sagt er nichts. Der
+geliefert hat - über den anschließenden Medienpfad sagt er nichts. Der
 läuft bei WebRTC direkt zu Port 8555 und nie durch nginx. Ein kaputter
 Medienpfad sieht in den Container-Logs deshalb aus wie Erfolg.
 
@@ -524,26 +524,26 @@ ungeprüft als Portnummer ins SDP (`8555/tcp`), der Browser verwirft
 daraufhin die *ganze* Answer, und **alle** Kameras bleiben schwarz.
 
 Dort gehört nur `host:port` hin. Ein einziger Eintrag erzeugt bereits
-Kandidaten für TCP **und** UDP — ein separater TCP-Eintrag ist nicht
+Kandidaten für TCP **und** UDP - ein separater TCP-Eintrag ist nicht
 nötig und existiert in dieser Form auch gar nicht.
 
 Warum das in go2rtcs eigenem Player nicht auffällt: der nutzt
 Trickle-ICE über WebSocket, bekommt jeden Kandidaten einzeln, und ein
 unbrauchbarer fällt allein durch. Über den POST-Weg stehen alle in
-einem Dokument — einer reißt alle mit. Die App wirft solche Zeilen
+einem Dokument - einer reißt alle mit. Die App wirft solche Zeilen
 inzwischen selbst weg, damit ein Vertipper höchstens einen Netzwerkpfad
 kostet.
 
 Der verräterische Fall ist die Meldung `ICE failed` in der Konsole:
 Signalisierung in Ordnung, Medien kommen nicht durch. Fast immer zeigt
 dann `webrtc.candidates` in `/etc/go2rtc/go2rtc.yaml` auf die falsche
-IP. **Die Datei liegt auf der VM und wird nicht mitdeployt** — eine
+IP. **Die Datei liegt auf der VM und wird nicht mitdeployt** - eine
 Korrektur im Repo ändert dort nichts.
 
 ### Als App installieren
 
 **Voraussetzung ist HTTPS.** Über `http://<IP>:8091` bietet kein Browser
-die Installation an, und Wake Lock bleibt ebenfalls aus — beides braucht
+die Installation an, und Wake Lock bleibt ebenfalls aus - beides braucht
 einen Secure Context. Es geht also erst nach Schritt 3 (NPMplus), unter
 `https://cam.DEINE-DOMAIN.tld`.
 
@@ -557,7 +557,7 @@ einen Secure Context. Es geht also erst nach Schritt 3 (NPMplus), unter
 
 Chrome und Edge verlangen für das Angebot zusätzlich einen Service
 Worker mit Fetch-Handler; Safari nicht. Deshalb liegt einer in
-`app/public/sw.js` — **network-first**, nicht cache-first. Der übliche
+`app/public/sw.js` - **network-first**, nicht cache-first. Der übliche
 PWA-Ansatz liefert die App-Shell aus dem Cache, was hier die falsche
 Abwägung wäre: nach einem Deploy liefe alter Code weiter, und genau in
 diesem Code stecken Watchdog, Ausgrauen und Alarm. Ein alter Stand, der
@@ -588,19 +588,19 @@ Alles wird in `localStorage` gemerkt.
 aktualisiert, und legt einen Knopf **Diagnose kopieren** in die Leiste.
 Ein Tap legt alles als Text in die Zwischenablage:
 
-- **Umgebung** — Build-Zeitstempel, User-Agent, Secure Context, ob
+- **Umgebung** - Build-Zeitstempel, User-Agent, Secure Context, ob
   `ManagedMediaSource` existiert, die Eingangswerte beider Heuristiken
   (`deviceMemory`, `hardwareConcurrency`) und der Inhalt von
   `localStorage`
-- **Je Kachel** — Zustand, Fehlversuche, letzter Grund, benutzter
+- **Je Kachel** - Zustand, Fehlversuche, letzter Grund, benutzter
   Stream-Name, dazu `readyState`, `buffered`, `currentTime` und
   Bildgröße des Video-Elements
-- **Je Transport** — bei MSE ausgehandelte und angebotene Codecs,
+- **Je Transport** - bei MSE ausgehandelte und angebotene Codecs,
   empfangene Bytes, angehängte Blöcke, Zustand der MediaSource, dazu
   `lastGap`, `playbackRate` und `videoReadyState`; bei WebRTC
   ICE-Zustände, empfangene Pakete, dekodierte Frames und der gewählte
   Kandidat
-- **Verlauf** — jeder Zustandswechsel und Fehlversuch mit Zeitstempel,
+- **Verlauf** - jeder Zustandswechsel und Fehlversuch mit Zeitstempel,
   wodurch Muster wie „verbindet alle 15 s neu" direkt ablesbar sind
 
 Der Build-Zeitstempel beantwortet dabei die Frage, die beim Einrichten
@@ -608,13 +608,13 @@ am häufigsten aufhält: **sieht dieses Gerät überhaupt den frisch
 deployten Stand?**
 
 Gedacht ist das für Handy und Fire Tablet, wo es keine Entwicklerkonsole
-gibt. Ohne Secure Context — also über `http://<IP>:8091` — gibt es keine
+gibt. Ohne Secure Context - also über `http://<IP>:8091` - gibt es keine
 Zwischenablage; dann zeigt der Knopf den Text zum Markieren an.
 
 Die Anzeige wird erst bei Bedarf nachgeladen (eigener Chunk, ~1 kB) und
 kostet im Normalbetrieb nichts.
 
-`cams.json` liegt neben `index.html` und wird zur Laufzeit geladen —
+`cams.json` liegt neben `index.html` und wird zur Laufzeit geladen -
 Kameras umbenennen oder ergänzen braucht **keinen neuen Build**.
 
 ### Wenn das Bild ruckelt
@@ -622,7 +622,7 @@ Kameras umbenennen oder ergänzen braucht **keinen neuen Build**.
 Erst die Frage klären, ob es an der App oder am Weg dorthin liegt.
 go2rtcs eigene Oberfläche taugt nur bedingt zum Vergleich: die ruft man
 im LAN auf (`http://192.168.2.166:1984`), die App von außen über
-NPMplus, authentik und TLS. Zwei verschiedene Wege — „bei go2rtc läuft's,
+NPMplus, authentik und TLS. Zwei verschiedene Wege - „bei go2rtc läuft's,
 in der App nicht" sagt für sich genommen also noch nichts über den Code.
 
 Sauber trennen lässt sich das mit einem Aufruf: die App **über die
@@ -646,24 +646,24 @@ zum Live-Ende in Sekunden, also das Polster, aus dem der Dekoder zehrt:
 | Befund | Bedeutung |
 |---|---|
 | `lastGap` ≈ 1, `playbackRate` ≈ 1 | Sollzustand |
-| `lastGap` nahe 0, `videoReadyState` unter `HAVE_FUTURE_DATA` | Puffer läuft leer — es kommt zu wenig nach |
+| `lastGap` nahe 0, `videoReadyState` unter `HAVE_FUTURE_DATA` | Puffer läuft leer - es kommt zu wenig nach |
 | `playbackRate` dauerhaft 0.1 | unterer Anschlag, der Stream hängt am Tropf |
 | `chunksDropped` steigt | der SourceBuffer nimmt nichts mehr an, Segmente werden verworfen |
 
 Danach nicht am Puffer drehen, sondern an der Zuleitung. Die Rate ist
-ein Regler, der sich selbst einpendelt — siehe `app/src/pace.ts`.
+ein Regler, der sich selbst einpendelt - siehe `app/src/pace.ts`.
 
 ---
 
 ## Warum der Watchdog so gebaut ist
 
 `RTCPeerConnection.connectionState` lügt. Der meldet minutenlang
-`connected`, während längst keine Frames mehr ankommen — etwa nach
+`connected`, während längst keine Frames mehr ankommen - etwa nach
 einem Cam-Neustart oder kurzem WLAN-Aussetzer. Bei einer Babycam ist
 das der gefährlichste Zustand: ein Standbild sieht aus wie ein
 schlafendes Kind.
 
-Deshalb prüft `watchdog.ts` im Sekundentakt zwei Lebenszeichen — aber
+Deshalb prüft `watchdog.ts` im Sekundentakt zwei Lebenszeichen - aber
 nicht gleichberechtigt:
 
 | Signal | verfügbar | Aussagekraft |
@@ -673,7 +673,7 @@ nicht gleichberechtigt:
 
 Wo `framesDecoded` verfügbar ist, entscheidet allein dieser Wert.
 „Eines von beiden genügt" wäre hier eine Falle: bleibt das Video stehen,
-während der Audiotrack weiterläuft, tickt `currentTime` munter weiter —
+während der Audiotrack weiterläuft, tickt `currentTime` munter weiter -
 und die Kachel meldete „Live" zu einem eingefrorenen Standbild. Auf MSE,
 wo es keinen Frame-Zähler gibt, bleibt `currentTime` das Kriterium.
 
@@ -681,21 +681,21 @@ Steht das maßgebliche Signal 3 s still, gilt der Stream als tot, das Bild
 wird ausgegraut und der Reconnect startet (1s, 2s, 4s, 8s, dann alle 15 s).
 
 **Bis zum ersten Bild gelten andere Regeln.** Vor dem ersten Frame
-passiert einiges — go2rtc meldet sich bei der Cam an, ICE handelt einen
-Pfad aus, DTLS gibt sich die Hand —, und das dauert bei WebRTC leicht
+passiert einiges - go2rtc meldet sich bei der Cam an, ICE handelt einen
+Pfad aus, DTLS gibt sich die Hand, und das dauert bei WebRTC leicht
 mehrere Sekunden, bei MSE fast nicht. Mit denselben 3 s würden wir eine
 gesunde Verbindung abschießen, bevor sie liefern konnte, und der
 Reconnect finge wieder von vorn an. Deshalb gilt in der Anlaufphase eine
 Geduld von 12 s.
 
 Die Kachel bleibt in dieser Zeit auf **Verbinde…**. Auf „Live" springt
-sie erst, wenn tatsächlich ein Frame dekodiert wurde — eine ausgehandelte
+sie erst, wenn tatsächlich ein Frame dekodiert wurde - eine ausgehandelte
 Verbindung ist noch kein Livebild.
 
 Und daran hängt der Fehlversuchszähler: er wird erst vom ersten Bild
 zurückgesetzt, nicht schon von der geglückten Aushandlung. Sonst käme
 eine Cam, die zwar aushandelt, aber nie ein Bild liefert, niemals in den
-roten Zustand — jeder Reconnect setzte den Zähler auf null, und **der
+roten Zustand - jeder Reconnect setzte den Zähler auf null, und **der
 Alarm bliebe für immer stumm**.
 
 Der Deckel bei 15 s ist Absicht: unbegrenztes Backoff würde bedeuten,
@@ -706,7 +706,7 @@ dass die Cam nach längerem Ausfall erst Minuten später zurückkommt.
 ## Bekannte Grenzen
 
 **Der Codec-String von go2rtc stimmt bei `tapo://` nicht.** Er wird aus
-der fmtp-Zeile der Quelle abgeleitet — die `tapo://` gar nicht liefert
+der fmtp-Zeile der Quelle abgeleitet - die `tapo://` gar nicht liefert
 (`pkg/tapo/producer.go` legt den Codec ohne `FmtpLine` an). go2rtcs
 `GetProfileLevelID("")` fällt dann auf fest verdrahtete Werte zurück und
 meldet für **jede** Tapo-Cam `avc1.640029`, also H.264 High 4.1,
@@ -723,7 +723,7 @@ lität und Level aus der `avcC`-Box des Init-Segments und ersetzt den
 unangetastet. Schlägt der korrigierte String fehl, wird go2rtcs
 ursprünglicher versucht.
 
-**Über MSE gibt es nur mit AAC Ton — und die Cams senden PCMA.** Das ist
+**Über MSE gibt es nur mit AAC Ton - und die Cams senden PCMA.** Das ist
 kein App-Fehler, sondern eine Eigenschaft der Kette, und der Grund dafür
 steht in go2rtcs Codec-Tabelle:
 
@@ -732,7 +732,7 @@ steht in go2rtcs Codec-Tabelle:
 | WebRTC | PCMU, PCMA, OPUS |
 | MSE | AAC, FLAC |
 
-Tapo-Cams liefern über RTSP `PCMA` (G.711) — bestätigt über
+Tapo-Cams liefern über RTSP `PCMA` (G.711) - bestätigt über
 `/api/streams`:
 
 ```json
@@ -740,11 +740,11 @@ Tapo-Cams liefern über RTSP `PCMA` (G.711) — bestätigt über
 "codec":  { "codec_name": "pcm_alaw", "sample_rate": 8000 }
 ```
 
-PCMA ist für WebRTC ein Pflichtcodec — **im LAN läuft der Ton also
+PCMA ist für WebRTC ein Pflichtcodec - **im LAN läuft der Ton also
 einfach.** In einen MP4-Container passt PCMA aber nicht; go2rtc kann es
 nach FLAC umpacken, und genau da hört es auf: Safaris
 `ManagedMediaSource` nimmt FLAC nicht an. In der Diagnose ist das direkt
-ablesbar — `offeredCodecs` enthält kein `flac`, und in der Folge steht in
+ablesbar - `offeredCodecs` enthält kein `flac`, und in der Folge steht in
 `negotiatedCodecs` gar kein Audioteil. **Kein Audioteil heißt: es gibt
 keine Tonspur, die man lautstellen könnte.** Der Schalter geht dann an,
 ohne dass etwas zu hören ist.
@@ -764,7 +764,7 @@ Zwei Details, die dabei leicht falsch gemacht werden:
 
 - **Als Eingabe der Stream-Name, nicht noch einmal die URL.** Beides ist
   erlaubt, aber der Name lässt ffmpeg aus dem bereits offenen Datenstrom
-  von go2rtc lesen — die Kamera sieht weiterhin nur eine RTSP-Sitzung.
+  von go2rtc lesen - die Kamera sieht weiterhin nur eine RTSP-Sitzung.
   Mit der URL wären es bei sechs Streams zwölf.
 - **Nur `#audio=aac`, kein `#video=…`.** Wird ein Medientyp angegeben,
   lässt ffmpeg den anderen weg. Diese Quelle liefert also ausschließlich
@@ -774,7 +774,7 @@ Zwei Details, die dabei leicht falsch gemacht werden:
 go2rtc sucht sich pro Client aus beiden Quellen die passenden Codecs
 zusammen („multi-source codec negotiation"): WebRTC nimmt weiter das
 unveränderte PCMA, MSE bekommt das AAC, HomeKit wandelt wie bisher nach
-OPUS. Der ffmpeg-Prozess startet nur, wenn ihn wirklich jemand braucht —
+OPUS. Der ffmpeg-Prozess startet nur, wenn ihn wirklich jemand braucht -
 `ffmpeg` muss dafür auf der VM liegen (`which ffmpeg`). Läuft HomeKit mit
 Ton, ist es fast sicher schon da.
 
@@ -782,11 +782,11 @@ Ton, ist es fast sicher schon da.
 entspricht Zeichen für Zeichen der Liste aus go2rtcs eigenem Player.
 Hier stand zwischenzeitlich zusätzlich `avc1.42E01E` (H.264 Baseline),
 gedacht fürs Fire Tablet. Bietet der Client ein Profil an, das die
-Kamera nicht liefert, kann go2rtc den Stream falsch etikettieren — und
+Kamera nicht liefert, kann go2rtc den Stream falsch etikettieren - und
 Safari lehnt das mit `MEDIA_ERR_DECODE` ab, wo Chrome großzügig
 darüber hinwegsieht. H.264 handelt go2rtc ohnehin aus.
 
-**Live schlägt flüssig — und beides steht in `app/src/pace.ts`.** Zwei
+**Live schlägt flüssig - und beides steht in `app/src/pace.ts`.** Zwei
 Mechanismen, die zusammen dafür sorgen, dass nie ein veraltetes Bild
 stehen bleibt:
 
@@ -795,14 +795,14 @@ Live-Ende: Rate = Rückstand / Zielrückstand, gedeckelt auf 0,1 bis 2,0.
 Bei einer Sekunde ergibt das exakt 1,0, darüber wird aufgeholt, darunter
 **gebremst**. Das Bremsen ist der Teil, der zählt, und er hat zweimal
 gefehlt: wer mit 1,0 weiterspielt, während der Puffer leer läuft, läuft
-ihn garantiert leer — Bild steht, wartet aufs nächste Segment, ruckt
+ihn garantiert leer - Bild steht, wartet aufs nächste Segment, ruckt
 weiter, bei jedem Netzhakler von neuem.
 
 *Die Obergrenze.* `seekTarget()` springt, sobald der Rückstand
 `MAX_LAG_S` (2,5 s) übersteigt, und überspringt die Bilder dazwischen.
 Ein Babyfon, das Vergangenheit zeigt, ist schlimmer als eines, das Bilder
 auslässt. Der Regler davor macht diesen Sprung zum Notnagel, den man im
-Alltag nicht zu sehen bekommt — genau hier stand einmal eine 2 **ohne**
+Alltag nicht zu sehen bekommt - genau hier stand einmal eine 2 **ohne**
 Regler, und dann wurde bei praktisch jedem Segment gesprungen: in Safari
 kostet jeder Sprung einen Dekoder-Neustart, sichtbar als ~1 fps.
 
@@ -821,30 +821,30 @@ erneut erfüllt.
 **Safari braucht einen eigenen MSE-Pfad.** Safari ab 17 (macOS wie iOS)
 bringt `ManagedMediaSource` statt `MediaSource` mit. Die will per
 `srcObject` angehängt werden statt per `createObjectURL`, und sie öffnet
-sich erst, wenn das Video-Element wirklich Daten anfordert — also erst
+sich erst, wenn das Video-Element wirklich Daten anfordert - also erst
 nach `play()`. Beides steht in `transport.ts`; wer dort aufräumt, sollte
 es wissen, denn der Fehler äußert sich nicht als Fehler, sondern als
 ewiges „Verbinde…" ausschließlich in Safari.
 
 **iOS im Hintergrund.** Wischst du die PWA weg oder sperrst das iPhone,
-suspendiert iOS sie — der Ton ist weg. Wake Lock hält den Bildschirm
+suspendiert iOS sie - der Ton ist weg. Wake Lock hält den Bildschirm
 an, solange die App im Vordergrund ist. Ein echter Hintergrund-Betrieb
 wie bei nativen Apps ist im Web nicht möglich. Für „Tablet steht
 daneben" irrelevant, für „Handy in der Hosentasche" nicht.
 
 **Fire Tablet 7.** Silk ist beim Wake Lock unzuverlässig. Empfehlung:
-*Fully Kiosk Browser* — hält den Bildschirm hart an, startet automatisch,
+*Fully Kiosk Browser* - hält den Bildschirm hart an, startet automatisch,
 echter Kiosk-Modus. Das Gerät bekommt über die Heuristik automatisch den
 VGA-Substream; notfalls `?sd=1` anhängen.
 
 **Mikrofon.** Noch nicht implementiert. Die Quellen stehen aber bereits
-auf `tapo://`, was den Rückkanal grundsätzlich ermöglicht — Tapo kann
+auf `tapo://`, was den Rückkanal grundsätzlich ermöglicht - Tapo kann
 nur ONVIF Profile S, über RTSP gäbe es keinen Backchannel. Nachrüsten
 heißt: Signaling von `POST /api/webrtc` auf go2rtcs WebSocket-API
 umstellen und einen `sendrecv`-Audio-Transceiver ergänzen.
 
 **HomeKit-Audio** kostet CPU, weil HomeKit OPUS verlangt und Tapo
-G.711 liefert — go2rtc transkodiert per FFmpeg. Wenn die VM knapp ist:
+G.711 liefert - go2rtc transkodiert per FFmpeg. Wenn die VM knapp ist:
 Audio in der HomeKit-Sektion weglassen und Ton nur über die App hören.
 
 ---
@@ -861,5 +861,5 @@ u.Host += ":8800"
 
 Das Cloud-Passwort ist reines Credential: es wird lokal gehasht
 (MD5 bzw. SHA256, je nach Firmware) und per RFC-7616-Digest gegen die
-Kamera geprüft. Zur Laufzeit ist **kein Internet nötig** — die Cams
+Kamera geprüft. Zur Laufzeit ist **kein Internet nötig** - die Cams
 dürfen komplett gefirewallt sein.
