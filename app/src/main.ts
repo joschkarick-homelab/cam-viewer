@@ -124,8 +124,81 @@ function setHidden(t: CamTile, hidden: boolean) {
   layoutGrid()
 }
 
+// ── Konfiguration laden ─────────────────────────────────────────────
+//
+// Scheitert cams.json, darf die App keine Sackgasse sein: als
+// installierte PWA auf iOS gibt es keine Browserleiste und kein
+// Pull-to-Refresh, man käme nur per Neuinstallation wieder heraus.
+
+/**
+ * Lädt cams.json. Ist die authentik-Session abgelaufen, antwortet der
+ * Proxy mit einem 302 auf die Login-Domain — ein normales fetch scheitert
+ * dann an CORS (Safari: "Load failed"). Mit redirect: 'manual' erkennen
+ * wir das und lösen eine echte Navigation aus, die den Login zeigt.
+ */
+async function loadConfig(): Promise<AppConfig> {
+  const r = await fetch('cams.json', { cache: 'no-store', redirect: 'manual' })
+  if (r.type === 'opaqueredirect' || r.status === 401 || r.status === 403) {
+    // Schutz gegen Reload-Schleifen: höchstens ein Auto-Reload pro 30 s
+    let last = 0
+    try { last = Number(sessionStorage.getItem('loginReload')) || 0 } catch { /* Storage gesperrt */ }
+    if (Date.now() - last < 30_000) throw new Error('Anmeldung nötig')
+    try { sessionStorage.setItem('loginReload', String(Date.now())) } catch { /* egal */ }
+    location.reload()
+    // Seite wird neu geladen, bis dahin nichts mehr aufbauen
+    return new Promise<never>(() => {})
+  }
+  if (!r.ok) throw new Error(`cams.json: HTTP ${r.status}`)
+  return r.json()
+}
+
+/** Wartezeit bis zum nächsten Versuch: 3 s, 10 s, 30 s, danach alle 30 s. */
+const RETRY_DELAYS = [3_000, 10_000, 30_000]
+
+/**
+ * Wiederholt loadConfig(), bis es klappt. Dazwischen steht der Fehler
+ * mit "Neu laden"-Knopf in der Leiste. Zurück in den Vordergrund oder
+ * wieder online → sofort der nächste Versuch statt auf den Timer zu warten.
+ */
+async function loadConfigWithRetry(): Promise<AppConfig> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const cfg = await loadConfig()
+      bar.replaceChildren()
+      bar.classList.remove('error')
+      return cfg
+    } catch (err) {
+      showError(err)
+      await retryWait(RETRY_DELAYS[Math.min(attempt, RETRY_DELAYS.length - 1)])
+    }
+  }
+}
+
+function retryWait(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const done = () => {
+      clearTimeout(timer)
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('online', done)
+      resolve()
+    }
+    const onVisible = () => { if (document.visibilityState === 'visible') done() }
+    const timer = setTimeout(done, ms)
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('online', done)
+  })
+}
+
+function showError(err: unknown) {
+  const msg = err instanceof Error ? err.message : String(err)
+  const text = document.createElement('span')
+  text.textContent = `Start fehlgeschlagen: ${msg}`
+  bar.replaceChildren(text, button('Neu laden', () => location.reload()))
+  bar.classList.add('error')
+}
+
 async function main() {
-  const cfg: AppConfig = await fetch('cams.json', { cache: 'no-cache' }).then((r) => r.json())
+  const cfg = await loadConfigWithRetry()
   const transport = pickTransport()
   const sd = useSubstream()
   const base = cfg.go2rtc || ''
@@ -457,10 +530,8 @@ document.addEventListener('fullscreenchange', () => {
   if (!document.fullscreenElement && app.dataset.focus) setFocus(null)
 })
 
-main().catch((err) => {
-  bar.textContent = `Start fehlgeschlagen: ${err.message}`
-  bar.classList.add('error')
-})
+// Fehler nach dem Laden der Config: zumindest der Knopf führt heraus.
+main().catch(showError)
 
 // Nur damit Chrome und Edge "Installieren" anbieten — der Worker cacht
 // network-first, siehe public/sw.js. Registriert sich ausschließlich im
