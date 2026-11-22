@@ -9,6 +9,6 @@
   "cams": [
     { "id": "schlafzimmer", "name": "Schlafzimmer", "sd": "schlafzimmer_sd", "alarm": true, "sound": true },
     { "id": "kinderzimmer", "name": "Kinderzimmer", "sd": "kinderzimmer_sd", "alarm": true, "sound": true },
-    { "id": "springer",     "name": "Springer",     "sd": "springer_sd",     "alarm": false, "sound": true }
+    { "id": "springer",     "name": "Benjamin",     "sd": "springer_sd",     "alarm": false, "sound": true }
   ]
 }
